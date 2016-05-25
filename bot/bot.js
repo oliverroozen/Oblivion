@@ -1,16 +1,13 @@
 //Add ability to tell person when another person comes online
 //Add libraries of helpful info and websites to help people code
 
-
-
-console.log("-----------------\nInitializing...");
+console.log("-----------------\nInitializing Oblivion...");
 
 var DiscordClient = require('discord.io');
 var bot = new DiscordClient({
     autorun: true,
     token: "MTgwOTA4MDk5NjY4OTM0NjU2.ChhDTA.E6qWXN0DJ7QdipOwwAWf2Y9sg34"
 });
-var debugMode = false;
 var userOnlineAlerts = [];
 
 var commands = {
@@ -84,8 +81,22 @@ var commands = {
                 console.log('Shutting down bot and closing program.');
             }, 2500);
             setTimeout(function(){
-               process.exit();
+               process.send('shutdown');
             }, 2800);
+		}
+	},
+    "restart": {
+		usage: "",
+        description: "Restarts the bot to reload source files, clear memory, and recieve any updates.",
+		process: function(user, userID, channelID, message, rawEvent, replyID, parsedVars) {
+            console.log('Restarting bot and reloading code from file...')
+            bot.sendMessage({
+                to: channelID,
+                message: "***I'll be back.***"
+            });
+            setTimeout(function(){
+                process.send('restart'); 
+            }, 1000);
 		}
 	},
     "calculate": {
@@ -143,16 +154,14 @@ bot.on('ready', function() {
     if (debugMode = true) {console.log("Entering debug mode!")};
     console.log("Server online! | " + bot.username + " - (" + bot.id + ")");
     
-    if (debugMode = false) {
         for (var key in bot.servers) {
             for (var key2 in bot.servers[key].channels) {
                 bot.sendMessage({
                     to: bot.servers[key].channels[key2].id,
-                    message: "***" + bot.username.toUpperCase() + " HATH ARRIVED!***  **WITNESS ME!!!**\nI hope you @wankers are ready for some >hardc0re banter, because that's all you're going to be getting."
+                    message: "***" + bot.username + " is back, bitches.***\nI hope you @wankers are ready for some >hardc0re banter, because that's all you're going to be getting."
                 });
             }
         }
-    }
 });
 
 bot.on('message', function(user, userID, channelID, message, rawEvent) {
