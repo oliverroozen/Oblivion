@@ -1,0 +1,45 @@
+{
+  "name": "mrsp33dy123.oblivion",
+  "title": "Oblivion",
+  "version": "0.6.0",
+  "description": "A bot for Discord using discord.io, intended to become the basement dweller's best assistant, and also best friend.",
+  "author": "Ollie Roozen",
+  "main": "bot/master.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MrSp33dy123/Oblivion"
+  },
+  "bugs": {
+    "url": "https://github.com/MrSp33dy123/Oblivion/issues"
+  },
+  "keywords": [
+    "Discord",
+    "Discordapp",
+    "discord.io",
+    "Bot",
+    "Chatbot",
+    "MusicBot"
+  ],
+  "dependencies": {
+    "bufferutil": "^3.0.5",
+    "discord.js": "^11.4.2",
+    "erlpack": "github:hammerandchisel/erlpack",
+    "ffmpeg-binaries": "^4.0.0",
+    "googleapis": "^32.0.0",
+    "libsodium-wrappers": "^0.7.3",
+    "mysql": "^2.16.0",
+    "node-gyp": "^3.8.0",
+    "node-opus": "^0.2.9",
+    "opusscript": "0.0.6",
+    "request": "^2.88.0",
+    "sodium": "github:paixaop/node-sodium",
+    "vui-ad-hoc-alexa-recognizer": "^1.5.109",
+    "ytdl-core": "^0.24.0"
+  },
+  "scripts": {
+    "start": "node --max-old-space-size=4096 oblivionSortExtension.js"
+  },
+  "private": true,
+  "analyze": true,
+  "license": "MIT"
+}
