@@ -1,5 +1,3 @@
-//Add ability to tell person when another person comes online
-//Add libraries of helpful info and websites to help people code
 // ROADMAP===========================
 // STAGE 1: Basic Functions
 // STAGE 2: Statistics, Memory, Data
@@ -8,14 +6,14 @@
 // STAGE 5: Understanding
 // http://fsymbols.com/generators/carty/
 // https://discordapp.com/oauth2/authorize?client_id=180907999219548160&scope=bot&permissions=2146958583
+// https://discordapp.com/oauth2/authorize?client_id=480219195515207680&scope=bot&permissions=8
 // Alice in Шøᾔḓℯяʟ@ηⅾ
 // —
 // (\w+):([^]+)(?=\s\w+:)
 // /\|?([^\|]+)/g
 // /(\w+):([^]+?)(?=\s\w+:|$)/g
 // /(?:([^\|])(?!\b\w+:))+/g
-const botToken = 'MTgwOTA4MDk5NjY4OTM0NjU2.Cq01mQ.RkyvY-nzG0xBOX42JINab4gJqC8';
-const creatorDiscordID = '175537821593894912';
+const privateData = require('../private-data.json');
 
 const lib = {
     filesystem: require('fs'),
@@ -24,7 +22,7 @@ const lib = {
     request: require('request'),
 	ytdl: require('ytdl-core'),
 	gapi: require('googleapis'),
-	googleAPIkey:'AIzaSyDJeMYoRNXfJ5RBcHt_ZvM3SxhGqYGHeUM'
+	googleAPIkey: privateData.google.apiKey
 };
 const Discord = require('discord.js');
 const mysql = require('mysql');
@@ -33,9 +31,9 @@ const commands = require('./commands.js');
 const bot = new Discord.Client();
 
 const SQLconn = mysql.createConnection({
-	host: 'localhost',
-	user: 'root',
-	password: 'admin',
+	host: privateData.mysql.host,
+	user: privateData.mysql.user,
+	password: privateData.mysql.password,
 	dateStrings: true,
 	multipleStatements: true,
 	supportBigNumbers: true,
@@ -127,7 +125,7 @@ console.log(`\n----------------------\nInitializing Server - ${lib.package.title
 SQLconn.connect((err)=>{
     if (err) {
 //        console.log('SQL database offline.');    
-      console.log('Error connecting to SQL database: ' + err.stack);
+		console.log('Error connecting to SQL database: ' + err.stack);
         return;
 		process.end();
     } else {
@@ -172,7 +170,7 @@ SQLconn.connect((err)=>{
         });
         console.log('Database connection online!');
     }
-	bot.login(botToken);
+	bot.login(privateData.discord.botToken);
 });
 
 bot.on('ready', () => {

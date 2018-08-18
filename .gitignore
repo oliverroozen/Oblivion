@@ -1,1 +1,4 @@
+# Ignore the ridiculously massive node modules folder
 node_modules/
+# This is to avoid commiting the secret file with sensitive information
+private-data.json
