@@ -2,3 +2,5 @@
 node_modules/
 # This is to avoid commiting the secret file with sensitive information
 private-data.json
+# Don't commit the log files
+/log/

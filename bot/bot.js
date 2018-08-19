@@ -6,7 +6,7 @@
 // STAGE 5: Understanding
 // http://fsymbols.com/generators/carty/
 // https://discordapp.com/oauth2/authorize?client_id=180907999219548160&scope=bot&permissions=2146958583
-// https://discordapp.com/oauth2/authorize?client_id=480219195515207680&scope=bot&permissions=8
+// https://discordapp.com/oauth2/authorize?client_id=480219195515207680&scope=bot
 // Alice in Шøᾔḓℯяʟ@ηⅾ
 // —
 // (\w+):([^]+)(?=\s\w+:)
@@ -22,7 +22,8 @@ const lib = {
     request: require('request'),
 	ytdl: require('ytdl-core'),
 	gapi: require('googleapis'),
-	googleAPIkey: privateData.google.apiKey
+	googleAPIkey: privateData.google.apiKey,
+	botAccent: 16771153 // 52685
 };
 const Discord = require('discord.js');
 const mysql = require('mysql');
@@ -44,81 +45,13 @@ lib.rl = lib.readline.createInterface({
     output: process.stdout
 });
 
-lib.ObvErr = class ObvErr {
-	constructor(type, data) {
-		switch (type) {
-			case 'autocorrect':
-				this.code = 'autocorrect';
-				this.message = "Autocorrecting command.";
-				this.severity = 3;
-				break;
-			case 'suggest':
-				this.code = 'suggest';
-				this.message = `Sorry, I couldn't find that command. Were you looking for \`>${data[0]}\`?`;
-				this.severity = 1;
-				break;
-			case 'noresult':
-				this.code = 'noresult';
-				this.message = "Sorry, I couldn't find that command. Consider checking the `>commands` list to find what you're looking for.";
-				this.severity = 0;
-				break;
-			case 'limitedchannel':
-				this.code = 'limitedchannel';
-				this.message = 'Please note that the command will have limited functionality in this channel type.';
-				this.severity = 2;
-				break;
-			case 'channelincompatible':
-				this.code = 'channelincompatible';
-				this.message = `Regretfully I must inform you that \`>${data[0]}\` isn't available in this channel type.`;
-				this.severity = 0;
-				break;
-			case 'limitedperms':
-				this.code = 'limitedperms';
-				this.message = 'Due to your permission level, the capabilities of the command have been limited.';
-				this.severity = 2;
-				break;
-			case 'forbidden':
-				this.code = 'forbidden';
-				this.message = "Sorry, you don't have permission to use this command.";
-				this.severity = 0;
-				break;
-			case 'nameinvalid':
-				this.code = 'nameinvalid';
-				this.message = `Your variable \`${data[0]}\` doesn't correspond with the command's specification.`;
-				this.severity = 3;
-				break;
-			case 'indexinvalid':
-				this.code = 'indexinvalid';
-				this.message = `Please note that your ${data[0]} non-literal variable didn't correspond any variables for the command.`;
-				this.severity = 3;
-				break;
-			case 'typeorder':
-				this.code = 'typeorder';
-				this.message = `Please note that any non-literal variable declarations listed after literal declarations will be ignored.`;
-				this.severity = 3;
-				break;
-			case 'invalidvar':
-				this.code = 'invalidvar';
-				this.message = `Sorry, \`${data[0]}\` must be ${data[1]}`;
-				this.severity = 0;
-				break;
-			case 'missingvar':
-				this.code = 'missingvar';
-				this.message = `The variable \`${data[0]}\` is not optional, and must be ${data[1]}`;
-				this.severity = 0;
-				break;
-			case 'errcustom':
-				this.code = 'errcustom';
-				this.message = data[0];
-				this.severity = 0;
-		}
-
-		if (this.severity < 2) {
-			console.log('Error too severe to proceed: ' + this.message);
-			throw this;
-		}
-	}
-}
+// Error levels:
+// 0 - No error
+// 1 - Notification
+// 2 - Command has limited functionality
+// 3 - Further response is nessecary
+// 4 - Blocking error
+// 5 - Programming fatal error
 
 console.log(`\n----------------------\nInitializing Server - ${lib.package.title} v${lib.package.version}`);
 
@@ -150,7 +83,7 @@ SQLconn.connect((err)=>{
 			ChannelID BIGINT UNSIGNED,
 			Data TEXT,
 			Initiated TIMESTAMP, 
-			ExecTime SMALLINT UNSIGNED, 
+			ExecTime MEDIUMINT UNSIGNED, 
 			State TINYTEXT, 
 			PRIMARY KEY (CallID)
 		)`,(err)=>{
@@ -212,39 +145,76 @@ bot.on('messageDelete', (message) => {
     lib.filesystem.appendFile(`log/deleted.txt`, `${message.author.username} @ ${message.channel.name} >> ${message.content}\r\n`, (err) => {if (err) {console.error(err);}});
 });
 
+bot.on('guildCreate', (guild) => {
+    console.log(`Added to a new server - ${guild.name}`);
+	
+	guild.systemChannel.send("Hey everyone! It's good to be here. I'm a bot that can help you with a ton of things. Type `>help` to find out more :blush:");
+	guild.systemChannel.send("**To the admins:** For me to work properly, I need to be granted a role with *administrator permissions*. I recommend creating a general `bot` role to do it, but the reason this has to be done at all is so that you have flexibility.");
+});
+
 function processInput(message) {
     if (typeof message == 'object') {
         if (message.author.id != bot.user.id) {
             if (message.content.charAt(0) == ">") {
 				var requestState = "incomplete";
                 var execTime = new Date().getTime();
-				try {
-					var commandData = processCommand(message);
-					requestState = 'success';
-				} catch (error) {
-					requestState = error.code;
-					var err;
-					if (typeof error.severity == 'number') {
-						err = error.message;
-						console.log('Detected a custom error.');
-					} else {
-						err = "Damn, some sort of error was encountered while trying to execute the command: `" + error.message + "`";
-						if (!commands[commandData['cmd']].specification.command.functional) {
-							err += "\nThis command is in beta. Issues are to be expected, unfortunately.";
-						}
-					}
-					console.log(`Error: ${error.message}`);
-					message.reply(err);
-				}
-                execTime = new Date().getTime() - execTime;
-                console.log(`Response time: ${execTime}ms`);
-//				console.log('Message id base 2: ' + parseInt(message.id).toString(2));	
+				message.channel.startTyping();
 				
-				SQLconn.query(`INSERT INTO CommandStats (MessageID, ChannelID, Data, Initiated, ExecTime, State) VALUES (?,?,?,NOW(),?,?)`,
-					  [message.id, message.channel.id, JSON.stringify(commandData), execTime, requestState],
-			  	function(err, rows, fields) {
-                    if (err) {throw err};
-                });
+				establishTargetCommand(message,(commandInfo,exceptions)=>{
+					if (exceptions.length > 0) {
+						var errMessage;
+						
+						exceptions.sort((a,b)=>{
+							return (a.severity < b.severity) ? 1 : ((b.severity > a.severity) ? -1 : 0);
+						});
+						
+						var maxSeverity = exceptions[0].severity;
+						
+						if (maxSeverity <= 3) {
+							var exceptionMessages = exceptions.map((cvar)=>{
+								if (cvar.severity <= 3) {return cvar.message};
+							});
+							errMessage = exceptionMessages.join(' ');
+							requestState = 'successNotif';
+						} else if (maxSeverity == 4) {
+							requestState = exceptions[0].code;
+							errMessage = exceptions[0].message;
+							console.log('Detected a custom error.');
+						} else if (maxSeverity == 5) {
+							// Checking for missing permissions, if so, handle
+							if (exceptions[0].code == 50013) {
+								requestState = exceptions[0].message;
+								errMessage = `It seems I don't have the correct permissions to complete this command. Please make the admins have given me a role with the *administrator* permission :sweat_smile:`
+							} else {
+								console.log('||||||IMPORTANT|||||| A fatal programming error was encountered while executing the command.');
+								console.log(exceptions[0]);
+								requestState = exceptions[0].message.replace(/(\r\n|\n|\r)/gm,"");
+								errMessage = "Damn, some sort of error was encountered while trying to execute the command: `" + requestState + "`";
+								if (!commands[commandInfo['cmd']].specification.command.functional) {
+									errMessage += "\nThis command is in beta. Issues are to be expected, unfortunately.";
+								}
+							}
+						} else {
+							console.log(`The program has produced an unexpected error severity: ${maxSeverity}`);
+						}
+						
+						console.log("Exception while executing " + commandInfo['cmd'].toUpperCase() + ": " + errMessage);
+						message.reply(errMessage);
+					} else {
+						console.log('Command completed successfully! Coolio, yo!');
+						requestState = 'success';
+					}
+					
+					message.channel.stopTyping();
+					execTime = new Date().getTime() - execTime;
+					console.log(`Response time: ${execTime}ms`);
+					
+					SQLconn.query(`INSERT INTO CommandStats (MessageID, ChannelID, Data, Initiated, ExecTime, State) VALUES (?,?,?,NOW(),?,?)`,
+						  [message.id, message.channel.id, JSON.stringify(commandInfo), execTime, requestState],
+					function(err, rows, fields) {
+						if (err) {throw err};
+					});
+				});
             } else {
                 wordPrompt(message);
             }
@@ -254,12 +224,12 @@ function processInput(message) {
     }
 }
 
-function processCommand(message) {
+function establishTargetCommand(message,callback) {
 	console.log(`Recieved ${message.content} from ${message.author.username}`);
     var commandInfo = {msg:message.cleanContent};
-	var warnList = [];
+	var exceptions = [];
     
-	var inputSplit = />(\w+)\(?([^\n\r\)]*)/gm.exec(message.content);
+	var inputSplit = />([^\s]+)\(?([^\n\r\)]*)/gm.exec(message.content);
     commandInfo['cmd'] = inputSplit[1].trim().toLowerCase();
 	 
     if (typeof commands[commandInfo['cmd']] === 'undefined') {
@@ -269,99 +239,100 @@ function processCommand(message) {
         if ((sim = findSimmilarCommand(commandInfo['cmd'])) !== false && sim[0] < commandInfo['cmd'].length / 2.5) {
             if (sim[0] == 1) {
 				commandInfo['cmd'] = sim[1];
-                warnList.push(new lib.ObvErr('autocorrect'));
+				exceptions.push({severity:1,code:'autoCorrect',message:'Your command was auto-corrected.'});
+				
+				collateCommandVariables(message,commandInfo,exceptions,inputSplit,callback);
             } else {
-				warnList.push(new lib.ObvErr('suggest',[sim[1]]));
+				callback(commandInfo,exceptions.concat({severity:3,code:'unsureCommand',message:`Sorry, I couldn't find that command. Were you looking for \`>${sim[1]}\`?`}));
+				// Use a async function for clicking of emoji reactions to continue
             }
         } else {
-            warnList.push(new lib.ObvErr('noresult'));
+			callback(commandInfo,exceptions.concat({severity:4,code:'noResult',message:"Sorry, I couldn't find that command. Consider checking the `>commands` list to find what you're looking for."}));
         }
-    }
-    
+    } else {
+		collateCommandVariables(message,commandInfo,exceptions,inputSplit,callback);
+	}
+}
+
+function collateCommandVariables(message,commandInfo,exceptions,inputSplit,callback) {
 	if (!commands[commandInfo['cmd']].specification.command.channelTypes.includes(message.channel.type)) {
-		warnList.push(new lib.ObvErr('channelincompatible',[commandInfo['cmd']]));
-	}
+		callback(commandInfo,exceptions.concat({severity:4,code:'channelIncompatible',message:`Regretfully I must inform you that \`>${commandInfo['cmd']}\` isn't available in this channel type.`}));
+	} else {
+		if (inputSplit[2].indexOf('|') != -1 || inputSplit[2].indexOf(':') != -1 ) {
+			var tmpMatch = inputSplit[2].match(/(?:([^\|])(?!\b\w+:))+/g);
+			var regex = /(.+):(.+)?/;
+			var previous;
 
-	if (inputSplit[2].indexOf('|') != -1 || inputSplit[2].indexOf(':') != -1 ) {
-		var tmpMatch = inputSplit[2].match(/(?:([^\|])(?!\b\w+:))+/g);
-		var regex = /(.+):(.+)/;
-		var previous;
+			tmpMatch.forEach((cvar,idx,arr)=>{
+				if (cvar.indexOf(':') != -1 && !/https?:/.test(cvar)) {
+					var tmpObj = regex.exec(cvar);
+					var varName = tmpObj[1].trim();
+					var found = false;
 
-		tmpMatch.forEach((cvar,idx,arr)=>{
-			if (cvar.indexOf(':') != -1 && !/https?:/.test(cvar)) {
-				var tmpObj = regex.exec(cvar);
-				var varName = tmpObj[1].trim();
-				var found = false;
+					commands[commandInfo['cmd']].specification.variables.forEach((cvar) => {
+						if (cvar[0] == varName) {
+							found = true;
+						}
+					});
 
-				commands[commandInfo['cmd']].specification.variables.forEach((cvar) => {
-					if (cvar[0] == varName) {
-//						commandInfo[varName] = tmpObj[2].trim();
-						found = true;
+					if (found) {
+						console.log(`${varName} found in specification.`);
+						commandInfo[varName] = ((tmpObj[2] === undefined) ? "" : tmpObj[2]).trim();
+					} else {
+						exceptions.push({severity:1,code:'nameInvalid',message:`Please note that your variable \`${varName}\` doesn't correspond with the command's specification.`});
 					}
+
+					previous = true;
+				} else {
+					if (idx != 0 && previous) {
+						exceptions.push({severity:1,code:'typeOrder',message:`Please note that any non-literal variable declarations listed after literal declarations will be ignored.`});
+					} else {
+						if (!(commandInfo[commands[commandInfo['cmd']].specification.variables[idx][0]] = cvar.trim())) {
+							exceptions.push({severity:1,code:'indexInvalid',message:`Please note that your ${data[0]} non-literal variable didn't correspond any variables for the command.`});
+						}
+						previous = false;
+					}
+				}
+			});
+		} else if (inputSplit[2] != '') {
+			var props = commands[commandInfo['cmd']].specification.variables;
+			if (props.length > 0) {
+				commandInfo[props[0][0]] = inputSplit[2].trim();
+			} else {
+				exceptions.push({severity:1,code:'indexInvalid',message:`Please note that your ${data[0]} non-literal variable didn't correspond any variables for the command.`});
+			}
+		}
+		
+		console.log(`Intermediate output: ${JSON.stringify(commandInfo)}`);
+		
+		commands[commandInfo['cmd']].specification.variables.forEach((cvar,idx,arr)=>{
+			if (typeof commandInfo[cvar[0]] !== 'undefined') {
+				if (!cvar[3].test(commandInfo[cvar[0]])) {
+					exceptions.push({severity:4,code:'invalidVar',message:`Sorry, \`${cvar[0]}\` must be ${cvar[1].lowercaseFL()}`});
+				}
+			} else {
+				if (cvar[2]) {
+					commandInfo[cvar[0]] = cvar[4];
+				} else {
+					exceptions.push({severity:4,code:'indexInvalid',message:`The variable \`${cvar[0]}\` is not optional, and must be ${cvar[1].lowercaseFL()}`});
+				}
+			}
+		});
+		
+		if (Math.max(exceptions.map((cvar)=>{return cvar.severity})) >= 4) {
+			callback(commandInfo,exceptions);
+		} else {
+			console.log("Final output: " + JSON.stringify(commandInfo));
+			
+			try {
+				commands[commandInfo['cmd']].process(bot,SQLconn,lib,commandInfo,message,exceptions,(error)=>{
+					callback(commandInfo,error);
 				});
-
-				if (found) {
-					console.log(`${varName} found in specification.`);
-					commandInfo[varName] = tmpObj[2].trim();
-				} else {
-					warnList.push(new lib.ObvErr('nameinvalid',[varName]));
-				}
-
-				previous = true;
-			} else {
-				if (idx != 0 && previous) {
-					warnList.push(new lib.ObvErr('typeorder'));
-				} else {
-					try {
-						commandInfo[commands[commandInfo['cmd']].specification.variables[idx][0]] = cvar.trim();
-					} catch (err) {
-						warnList.push(new lib.ObvErr('indexinvalid',[getOrdinal(idx+1)]));
-					}
-					previous = false;
-				}
-			}
-		});
-	} else if (inputSplit[2] != '') {
-		var props = commands[commandInfo['cmd']].specification.variables;
-		if (props.length > 0) {
-			commandInfo[props[0][0]] = inputSplit[2].trim();
-		} else {
-			warnList.push(new lib.ObvErr('indexinvalid',[getOrdinal(1)]));
-		}
-	}
-
-	console.log(`Intermediate output: ${JSON.stringify(commandInfo)}`);
-
-	commands[commandInfo['cmd']].specification.variables.forEach((cvar,idx,arr)=>{
-		if (typeof commandInfo[cvar[0]] !== 'undefined') {
-			if (!cvar[3].test(commandInfo[cvar[0]])) {
-				warnList.push(new lib.ObvErr('invalidvar',[cvar[0],cvar[1].lowercaseFL()]));
-			}
-		} else {
-			if (cvar[2]) {
-				commandInfo[cvar[0]] = cvar[4];
-			} else {
-				warnList.push(new lib.ObvErr('missingvar',[cvar[0],cvar[1].lowercaseFL()]));
+			} catch (error) {
+				error.severity = 5;
+				callback(commandInfo,exceptions.push(error));
 			}
 		}
-	});
-
-	if (warnList.length > 0) {
-		warnList = warnList.map((cvar)=>{
-			return cvar.message;
-		});
-		message.reply(warnList.join(' '));
-	}
-
-	console.log("Final output: " + JSON.stringify(commandInfo));
-
-	try {
-		commands[commandInfo['cmd']].process(bot, SQLconn, lib, commandInfo, message);
-		console.log("Command completed successfully! Coolio, yo!");
-		return commandInfo;
-	} catch (error) {
-		console.log("Error while executing " + commandInfo['cmd'].toUpperCase() + ": " + error.message);
-		throw error;
 	}
 }
 
@@ -384,17 +355,21 @@ function wordPrompt(message) {
     }else if (message.content.includes("( ͡° ͜ʖ ͡°)")) {
         message.channel.send("(lenny face)");
         message.delete();
-    } else if (message.author == "175670558040653825") {
+    }/* else if (message.author == "175670558040653825") {
         message.reply(":100::100:hOHoHOHHHHMYFUCckking GOFD :joy::joy::joy: DUDE :ok_hand:i AM :point_right:LITERALLY:point_left: iN :joy:TEARS:joy: RIGHT NOW BRo :point_up_2::point_down::point_right::point_left: hHAHAHAHAHAHAHA :v:️:ok_hand::thumbsup: TAHT WA SO FUCKIN G FUNNY DUd :droplet::droplet::sweat_smile::joy::sweat_drops::droplet:I cAN NOT FUKING BELIEV how :100:FUNny :ok_hand::thumbsup::100:thta shit wa s :eyes::thumbsup::laughing::joy::joy::sweat_smile: I :boy: CAN NOT :x: bRATHE :nose::lips::nose::lips::x::x: / HELP :exclamation:️I NEEd :point_right::point_right: AN a m b u l a n c e:ambulance::ambulance: SSSooOOoo00000oOOOOOøøøØØØØØ fKING FUNY :heavy_check_mark:️:ballot_box_with_check:️:100::100:1️⃣0️⃣0️⃣:laughing::laughing::joy::joy::sweat_smile: shit man :grey_exclamation::100::100::fire::point_up:️:ok_hand:damn");
-    }/* else if (message.content.includes(bot.user.username) || message.content.includes(bot.user.id)) {
+    } else if (message.content.test(/[\w\W]* alexa play ([\w\W]*)/)) {
+        var search = /[\w\W]* alexa play ([\w\W]*)/.exec(message.content);
+//		commands['play'].process(bot,SQLconn,lib,commandInfo,message,exceptions);
+		message.reply('This is so sad.');
+    } else if (message.content.includes(bot.user.username) || message.content.includes(bot.user.id)) {
         console.log("Recieved mention...");
         message.channel.send('_Do you expect me to talk?_');
     }*/
-     
 }
 
 function commandlinePrompt(input) {
     var commandInfo = [];
+	var exceptions = [];
     
     if (input.indexOf('(') == -1) {
         commandInfo.push(input);
@@ -414,8 +389,13 @@ function commandlinePrompt(input) {
     };
     
     try {
-        commands[commandInfo[0]].process(bot, SQLconn, lib, commandInfo, message);
-        console.log(`Command ${commandInfo[0]} completed successfully.`);
+        commands[commandInfo[0]].process(bot, SQLconn, lib, commandInfo, message, exceptions, (error)=>{
+			if (error.length == 0) {
+				console.log(`Command ${commandInfo[0]} completed successfully.`);
+			} else {
+				console.log(`Error while executing command: ${JSON.stringify(error)}`);
+			}
+		});
     } catch (error) {
         if (typeof commands[commandInfo[0]] == 'undefined') {
             console.log(`Command ${commandInfo[0]} not found!`);
@@ -438,8 +418,6 @@ function findSimmilarCommand(command) {
             }
         }
     }
-	
-	console.log(sorted);
 	
     sorted.sort((a, b) => {
         if (a[0] === b[0]) {
@@ -606,6 +584,16 @@ lib.isPlural = function isPlural(quantity) {
 	}
 }
 
+lib.resolveEmbedAccent = function resolveEmbedAccent(bot,message, botAccent, callback) {
+	if (message.guild) {
+		message.guild.fetchMember(bot.user).then((guildMember)=>{
+			callback(guildMember.displayColor);
+		});
+	} else {
+		callback(botAccent);
+	}
+}
+
 lib.enqueueTrack = function enqueueTrack(video,message,queueLength,queueTime) {
 	message.guild.fetchMember(message.author).then((guildmember) => {
 		var embed = {
@@ -636,29 +624,27 @@ lib.enqueueTrack = function enqueueTrack(video,message,queueLength,queueTime) {
 }
 
 lib.playTrack = function playTrack(key,queueLength,video,voiceID,textID,messageID,nextTrack) {
+	var embed = {
+		color: 7919944,
+		author: {
+			name: `Now Playing 🎶`,
+			icon_url: bot.user.avatarURL,
+			url: `https://github.com/MrSp33dy123/${bot.user.username}`
+		},
+		thumbnail: {
+			url: video.thumbnail
+		},
+		footer: {}
+	};
+	
 	if (queueLength > 1) {
-		var footerText = `Up next: ${nextTrack.title}`;
+		embed.footer.text = `Up next: ${nextTrack.title}`;
+		embed.footer.icon_url = nextTrack.thumbnail;
 	}
 	
 	bot.channels.get(textID).fetchMessage(messageID).then(message => {
 		message.guild.fetchMember(message.author).then((guildmember) => {
-			var embed = {
-				description: `**${video.title}**\n_${video.channelName}_\n_${lib.displayDuration(video.duration)}_\n\`Added by ${guildmember.displayName}\``,
-				color: 7919944,
-				author: {
-					name: `Now Playing 🎶`,
-					icon_url: bot.user.avatarURL,
-					url: `https://github.com/MrSp33dy123/${bot.user.username}`
-				},
-				thumbnail: {
-					url: video.thumbnail
-				},
-				footer: {
-					text: footerText,
-					icon_url: video.thumbnail
-				}
-			};
-
+			embed.description = `**${video.title}**\n_${video.channelName}_\n_${lib.displayDuration(video.duration)}_\n\`Added by ${guildmember.displayName}\``;
 			message.channel.send('',{embed});
 		});
 
@@ -668,8 +654,8 @@ lib.playTrack = function playTrack(key,queueLength,video,voiceID,textID,messageI
 			crntVoiceChnl.join().then(connection => {
 				const ytStream = lib.ytdl('https://www.youtube.com/watch?v=' + video.id,{filter:'audioonly'});
 				const dispatcher = connection.playStream(ytStream,{seek:0,bitrate:'auto'});
+				
 				dispatcher.on('end',()=>{
-
 					SQLconn.query(`DELETE FROM QueuedTracks WHERE ?; SELECT ID, VoiceID, TextID, VideoData, MessageID FROM QueuedTracks WHERE ? ORDER BY TimeRequested`,[{ID:key},{ServerID:parseInt(crntVoiceChnl.guild.id)}],(err, rows, fields) => {
 						if (err) {throw err};
 

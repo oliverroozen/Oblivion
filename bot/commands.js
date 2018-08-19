@@ -11,16 +11,16 @@ module.exports = {
             },
             variables:[]
         },
-		process: function(bot, sql, lib, cmd, message) {
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
             if (message.channel.type != undefined) {
                     message.channel.send("***I'll be back.***").then((msg) => {
-                    process.send('restart'); 
-                    sql.end();
+                    process.send('restart');
+					callback(exceptions);
                 });
             } else {
                 console.log("I'll be back.");
                 process.send('restart');
-                sql.end();
+				callback(exceptions);
             }
 		}
     },
@@ -36,16 +36,18 @@ module.exports = {
 				['command', 'A command to post detailed information on.', true, /[^\n\s]+/]
 			]
 		},
-		process: function(bot, sql, lib, cmd, message) {
-            if (cmd['command']) {
-				if (typeof module.exports[cmd['command']] != 'undefined') {
-					message.guild.fetchMember(bot.user).then((guildMember)=>{
-						const commandSpec = module.exports[cmd['command']].specification;
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			var command = cmd['command'];
+			
+            if (command) {
+				if (typeof module.exports[command] != 'undefined') {
+					
+					lib.resolveEmbedAccent(bot,message,lib.botAccent,(resolvedColour)=>{
+						const commandSpec = module.exports[command].specification;
 						
 						var embed = {
-//		                    title: `[Donate to keep Googlebot alive](https://patreon.com/guscaplan)`, //`\`${module.exports[cmd[1]].usage}\``  `(>${cmd[1]})[https://www.google.co.nz]`
 							description: "",
-							color: guildMember.displayColor, //52685
+							color: resolvedColour,
 							type: "markdown",
 							author: {
 								name: "",
@@ -55,7 +57,7 @@ module.exports = {
 							fields: []
 						};
 
-						embed.author.name = lib.formatCommandSpec(cmd['command'],commandSpec);
+						embed.author.name = lib.formatCommandSpec(command,commandSpec);
 						embed.description += commandSpec.command.description(bot);
 
 						commandSpec.variables.forEach((spec)=>{
@@ -68,14 +70,19 @@ module.exports = {
 							});
 						});
 
-						message.channel.send('',{embed});
+						message.channel.send('',{embed}).then(()=>{
+							callback(exceptions);
+						});
 					});
 				} else {
-					new lib.ObvErr('errcustom',[`Freaking freak, \`${cmd['command']}\` isn't a valid command! :grimacing:`]);
+					console.log('Given command input is not valid command.');
+					callback(exceptions.concat({severity:4,code:'errCommandNonexistent',message:`Freaking freak, \`${command}\` isn't a valid command! :grimacing:`}));
 				}
 			} else {
 				message.channel.send(`Glad you've taken notice of me, ${message.author} :yum:`);
-				message.channel.send("There are a few things to know about me. Firstly, to get my attention, you use commands. Right now, all my commands are prefaced with a `>` character. You can call a command with no parameters, but otherwise my commands are formatted in two fundamental ways: ambiguous, and defined parameters. Let me explain.\n\nCommands with **ambiguous parameters** are formatted as follows: `>command var1`, `>command(var1)`,`>command var1 | var2 | var3`, or `>command(var1 | var2 | var3)`. A lot of the time I will show my commands with brackets to enclose the parameters, however they are always optional. Sometimes, they make the command more organized.\n\nCommands with **defined parameters** are formatted similarly to above, with the exception that each variable has two parts; the _parameter name_, and the _parameter value_. `>command name1:var1` and `>command(name1:var1 | name2:var2 | name3:var3)` are just two examples. You might want to use defined parameters if a command has many optional parameters, but you want to set only a few of them. You can set only the variables you want, rather than having to go through all of them. You can mix ambiguous and defined parameters, however only with defined parameters _after_ ambiguous parameters.\n\nWith that out of the way, hit me up with `>commands()` to see what I can do for you.");
+				message.channel.send("There are a few things to know about me. Firstly, to get my attention, you use commands. Right now, all my commands are prefaced with a `>` character. You can call a command with no parameters, but otherwise my commands are formatted in two fundamental ways: ambiguous, and defined parameters. Let me explain.\n\nCommands with **ambiguous parameters** are formatted as follows: `>command var1`, `>command(var1)`,`>command var1 | var2 | var3`, or `>command(var1 | var2 | var3)`. A lot of the time I will show my commands with brackets to enclose the parameters, however they are always optional. Sometimes, they make the command more organized.\n\nCommands with **defined parameters** are formatted similarly to above, with the exception that each variable has two parts; the _parameter name_, and the _parameter value_. `>command name1:var1` and `>command(name1:var1 | name2:var2 | name3:var3)` are just two examples. You might want to use defined parameters if a command has many optional parameters, but you want to set only a few of them. You can set only the variables you want, rather than having to go through all of them. You can mix ambiguous and defined parameters, however only with defined parameters _after_ ambiguous parameters.\n\nWith that out of the way, hit me up with `>commands()` to see what I can do for you.").then(()=>{
+					callback(exceptions);
+				});
 			}
 		}
     },
@@ -83,68 +90,73 @@ module.exports = {
         specification:{
             command:{
                 description: (bot)=> {return `Deletes a given quantity of preceeding messages in the channel.`},
-                channelTypes: ['text','dm','group'],
+                channelTypes: ['text','group'],
                 permissionLevel: 1,
-                functional: true
+                functional: false
             },
             variables:[
                 ['quantity', "The amount of messages to search through to delete all that match the criteria.", false, /^\d+$/],
                 ['author', 'An _@mention_ of a user to exclusively delete the messages of.', true, /^<@\d+>$|^@everyone+$|^@here+$/, '@everyone']
             ]
         },
-        process: function(bot, sql, lib, cmd, message) {
-            cmd['quantity'] = cmd['quantity'].match(/\d+/);
+        process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			var author = cmd['author'];
+			var quantity = cmd['quantity'].match(/\d+/)
             
-            if (cmd['quantity'] < 1) {
-				new lib.ObvErr('errcustom',["It's impossible to delete zero messages or any less thereof."]);
-            }
-            if (cmd['quantity'] > 99) {
-				new lib.ObvErr('errcustom',["To stop people from demolishing the entire history of the universe and everything, there is a `99` message limit."]);
-            }
-			if (cmd['author'] == '@here') {
-				new lib.ObvErr('errcustom',["`@here` is not currently supported. Sorry :pensive:"]);
-			}
-            
-			message.channel.startTyping();
-            if (cmd['author'] == '@everyone') {
-                message.channel.bulkDelete(parseInt(cmd['quantity'])+1).then(()=> {
-                    message.channel.send(`_${message.author.username} removed ${cmd['quantity']} messages._`);
-					message.channel.stopTyping();
-                }).catch((err)=>{
-					throw err;
-				});
-            } else {
-//                if (typeof (cmd['author'] = message.mentions.users.get(cmd['author'])) === 'undefined') {
-				if (typeof (cmd['author'] = message.mentions.users.get(cmd['author'].match(/^<@(\d+)>$/)[1])) === 'undefined') {
-                    new lib.ObvErr('errcustom',["The author you entered couldn't be resolved."]);
-                } else {
-					console.log(cmd['author'].username);
-					message.channel.fetchMessages({limit:parseInt(cmd['quantity'])+1}).then((messages)=>{
-						var messagesFromAuthor = messages.findAll('author', cmd['author']);
-						console.log(`Recieved ${messages.size} messages`);
-						console.log(`Found ${messagesFromAuthor.length} messages from author`);
-						
-						if (messagesFromAuthor.length == 0) {
-							message.reply("It appears I didn't find any messages by this person, sorry.");
-							message.channel.stopTyping();
-						} else if (messagesFromAuthor.length == 1) {
-							message.channel.delete(messagesFromAuthor).then(()=> {
-								message.channel.send(`_${message.author.username} removed ${messages.size} of ${cmd['author'].username}'s messages from the past ${cmd['quantity']} messages._`);
-								message.channel.stopTyping();
-							}).catch((err)=>{
-								throw err;
-							});
-						} else {
-							message.channel.bulkDelete(messagesFromAuthor).then(()=> {
-								message.channel.send(`_${message.author.username} removed ${messages.size} of ${cmd['author'].username}'s messages from the past ${cmd['quantity']} messages._`);
-								message.channel.stopTyping();
-							}).catch((err)=>{
-								throw err;
-							});
-						}
+            if (quantity < 1) {
+				callback(exceptions.concat({severity:4,code:'quantityTooLow',message:"It's impossible to delete zero messages or any less thereof."}));
+			} else if (quantity > 99) {
+				callback(exceptions.concat({severity:4,code:'quantityTooHigh',message:"To stop people from demolishing the entire history of the universe and everything, there is a `99` message limit."}));
+            } else if (author == '@here') {
+				callback(exceptions.concat({severity:4,code:'hereMentionUnsupported',message:"`@here` is not currently supported. Sorry :pensive:"}));
+			} else {
+				if (author == '@everyone') {
+					console.log('Bulk deleting messages...');
+					message.channel.bulkDelete(parseInt(quantity)+1,true).then(()=> {
+						message.channel.send(`_${message.author.username} removed ${quantity} messages._`);
+						// This callback works...?
+						callback(exceptions);
+					}).catch((err)=>{
+						console.log(err);
+						err.severity = 5;
+						// This callback works too...
+						callback(exceptions.concat(err));
 					});
-                }
-            }
+				} else {
+					if (typeof (author = message.mentions.users.get(author.match(/^<@(\d+)>$/)[1])) === 'undefined') {
+						callback(exceptions.concat({severity:4,code:'unresolvedUser',message:"The author you entered couldn't be resolved."}));
+					} else {
+						message.channel.fetchMessages({limit:parseInt(quantity)+1}).then((messages)=>{
+							var messagesFromAuthor = messages.filter(cvar => cvar.author === author);
+							console.log(`Recieved ${messages.size} messages`);
+							console.log(`Found ${messagesFromAuthor.length} messages from author`);
+
+							if (messagesFromAuthor.length == 0) {
+								message.reply("It appears I didn't find any messages by this person, sorry.").then(()=>{
+									callback(exceptions);
+								});
+							} else if (messagesFromAuthor.length == 1) {
+								message.channel.delete(messagesFromAuthor).then(()=> {
+									message.channel.send(`_${message.author.username} removed ${messagesFromAuthor.size} of ${author.username}'s messages from the past ${quantity} messages._`);
+									callback(exceptions);
+								}).catch((err)=>{
+									err.severity = 5;
+									callback(exceptions.concat(err));
+								});
+							} else {
+								message.channel.bulkDelete(messagesFromAuthor).then(()=> {
+									message.channel.send(`_${message.author.username} removed ${messagesFromAuthor.size} of ${author.username}'s messages from the past ${quantity} messages._`);
+									console.log(exceptions);
+									callback(exceptions);
+								}).catch((err)=>{
+									err.severity = 5;
+									callback(exceptions.concat(err));
+								});
+							}
+						});
+					}
+				}
+			} 
         }
     },
 	"echo": {
@@ -159,9 +171,20 @@ module.exports = {
                 ['text', "A phrase to echo back.", false, /[^\n]+/],
             ]
         },
-        process: function(bot, sql, lib, cmd, message) {
-            message.delete();
-			message.channel.send(cmd['text']);
+        process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			var text = cmd['text'];
+			
+            message.delete().then(()=>{
+				message.channel.send(text).then(()=>{
+					callback(exceptions);
+				}).catch((err)=>{
+					err.severity = 5;
+					callback(exceptions.concat(err));
+				});
+			}).catch((err)=>{
+				err.severity = 5;
+				callback(exceptions.concat(err));
+			});
         }
     },
 	"sosig": {
@@ -174,38 +197,34 @@ module.exports = {
             },
 			variables: []
 		},
-		process: function(bot, SQLconn, lib, cmd, message) {
-            message.channel.send('***Sosig tested, Sosig approved.***');
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+            message.channel.send('***Sosig tested, Sosig approved.***').then(()=>{
+				callback(exceptions);
+			}).catch((err)=>{
+				err.severity = 5;
+				callback(exceptions.concat(err));
+			});
 		}
     },
 	"commands": {
 		specification:{
             command:{
-                description: (bot)=> {return `Posts a list of all commands that ${bot.user.username} can use to your PM.`},
+                description: (bot)=> {return `Posts a list of all commands that ${bot.user.username} can use, to your PM.`},
                 channelTypes: ['text','dm','group'],
                 permissionLevel: 2,
                 functional: true
             },
             variables:[]
         },
-		process: function(bot, sql, lib, cmd, message) {
-			if (cmd['format']) {cmd['format'] = cmd['format'].toLowerCase()};
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			var format = cmd['format'];
 			
-			if (message.guild) {
-				message.guild.fetchMember(bot.user).then((guildMember)=>{
-					postEmbed(guildMember.displayColor);
-				});
-			} else {
-				postEmbed(2123412);
-			}
+			if (format) {format = format.toLowerCase()};
 			
-			function postEmbed(colour) {
+			lib.resolveEmbedAccent(bot,message,lib.botAccent,(resolvedColour)=>{
 				var embed = {
-//                    thumbnail: {
-//                        url: "https://lh3.googleusercontent.com/-4YMcPk0eBpI/WEjALPgp79I/AAAAAAAACXk/pl8HnDpUslYLFCClp7URdgMD7pPEh2FJgCL0B/w530-d-h298-p-rw/gargantua-3.jpg"
-//                    },
 					description: "A comprehensive list of every command in " + bot.user.username + "'s vocabulary.",
-					color: colour,
+					color: resolvedColour,
 					author: {
 						name: `${bot.user.username} Command Library`,
 						icon_url: bot.user.avatarURL,
@@ -213,6 +232,7 @@ module.exports = {
 					},
 					fields: []
 				};
+				
 				for (var command in module.exports) {
 					var commandSpec = module.exports[command].specification;
 					if (commandSpec.command.functional == true) {
@@ -223,12 +243,23 @@ module.exports = {
 						});
 					}
 				}
-				message.author.send('',{embed});
-				if (message.channel.type == 'text') {
-					message.reply('a full list of commands has been PMed to you, mate. Have fun with yer new toys :yum:');
-				}
-			}
-		} 
+				
+				message.author.send('',{embed}).then(()=>{
+					if (message.channel.type == 'text') {
+						message.reply('a full list of commands has been PMed to you, mate. Have fun with yer new toys :yum:').then(()=>{
+							callback(exceptions);
+						}).catch((err)=>{
+							callback(exceptions.concat(err));
+						});
+					} else {
+						callback(exceptions);
+					}
+				}).catch((err)=>{
+					err.severity = 5;
+					callback(exceptions.concat(err));
+				});
+			});
+		}
 	},
 	"horn": {
 		specification:{
@@ -240,27 +271,31 @@ module.exports = {
             },
             variables:[]
         },
-		process: function(bot, sql, lib, cmd, message) {
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
 			const hornPath = ['mlg-airhorn-1.mp3','lorde-perfect-places.mp3'];
+			
 			if (message.member.voiceChannel) {
 				message.member.voiceChannel.join().then(connection => {
 					message.channel.send('***BAAARRRRRRRRRPP!!!***').then((msg)=>{
 						const dispatcher = connection.playFile(`${__dirname}/assets/${hornPath[0]}`);
 						dispatcher.on('end',()=>{
 							connection.disconnect();
-							msg.delete();
+							msg.delete().then(()=>{
+								callback(exceptions);
+							});
 						});
 						dispatcher.on('error',(error)=>{
-							console.log(error);
+							error.severity = 5;
+							callback(exceptions.concat(error));
 						});
 					});
 				}).catch((err)=>{
-					new lib.ObvErr('errcustom',[`There was an error joining the voice channel, sorry! \`${err}\``]);
+					callback(exceptions.concat({severity:4,code:'couldntJoinVoice',message:`There was an error joining the voice channel, sorry! \`${err}\``}));
 				});
 			} else {
-				new lib.ObvErr('errcustom',["You need to be in a voice channel first, bruh."]);
+				callback(exceptions.concat({severity:4,code:'notInVoiceChannel',message:"You need to be in a voice channel first, bruh."}));
 			}
-		} 
+		}
 	},
 	"play": {
 		specification:{
@@ -274,143 +309,180 @@ module.exports = {
 				['query','The URL or a search term for your desired track.', false, /[^]+/]
 			]
         },
-		process: function(bot, sql, lib, cmd, message) {
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
 			// /https?:\/\/[\s\S]+/
+			var query = cmd['query'];
+			
 			if (message.member.voiceChannel) {
 				if (message.member.voiceChannel != message.guild.afkChannel) {
 					// This would be where code to handle the queue would go
-					message.channel.startTyping();
-					if (/https?:\/\/\w+.youtube./.test(cmd['query'])) {
+					if (/https?:\/\/\w+.youtube./.test(query)) {
 						var videoData = {};
-						videoData.id = cmd['query'].match(/https?:\/\/\w+.youtube.com\/watch\?v=(\w{11})/)[1];
-
+						videoData.id = query.match(/https?:\/\/\w+.youtube.com\/watch\?v=(\w{11})/)[1];
+						
 						const youtube = lib.gapi.google.youtube('v3');
 						youtube.videos.list({id:videoData.id,part:'snippet,contentDetails',auth:lib.googleAPIkey},(err,vidresponse)=>{
-							if (err) {throw err};
-							
-							if (vidresponse.pageInfo.totalResults == 0) {
-								// Eventually use proper error handling
-								message.reply("That appears to be an invalid URL. Couldn't find anything.");
-								message.channel.stopTyping();
+							if (err) {
+								err.severity = 5;
+								callback(exceptions.concat(err));
 							} else {
-								videoData.channelID = vidresponse.items[0].snippet.channelId;
-								videoData.title = vidresponse.items[0].snippet.title;
-								videoData.thumbnail = vidresponse.items[0].snippet.thumbnails.default.url;
-								videoData.duration = lib.convertYTduration(vidresponse.items[0].contentDetails.duration);
+								if (vidresponse.pageInfo.totalResults === 0) {
+									callback(exceptions.concat({severity:4,code:'invalidURL',message:"That appears to be an invalid URL. Couldn't find anything."}));
+								} else {
+									videoData.channelID = vidresponse.items[0].snippet.channelId;
+									videoData.title = vidresponse.items[0].snippet.title;
+									videoData.thumbnail = vidresponse.items[0].snippet.thumbnails.default.url;
+									videoData.duration = lib.convertYTduration(vidresponse.items[0].contentDetails.duration);
 
-								youtube.channels.list({id:videoData.channelID,part:'snippet',auth:lib.googleAPIkey},(err,channelresponse)=>{
-									videoData.channelName = channelresponse.items[0].snippet.title;
-									console.log(videoData);
-									whenSelected(videoData);
-									message.channel.stopTyping();
-								});
-							}
+									youtube.channels.list({id:videoData.channelID,part:'snippet',auth:lib.googleAPIkey},(err,channelresponse)=>{
+										if (err) {
+											err.severity = 5;
+											callback(exceptions.concat(err));
+										} else {
+											videoData.channelName = channelresponse.items[0].snippet.title;
+											console.log(videoData);
+											whenSelected(videoData);
+										}
+									});
+								}
+							};
 						});
-					} else if (/https?:\/\/[\s\S]+/.test(cmd['query'])) {
-						new lib.ObvErr('errcustom',["Currently only URLs directed to YouTube are supported, sorry."]);
-						message.channel.stopTyping();
-					} else if (/[A-Z]:\\[\s\S]+/.test(cmd['query'])) {
+					} else if (/https?:\/\/[\s\S]+/.test(query)) {
+						callback(exceptions.concat({severity:4,code:'urlNotSupported',message:"Currently only URLs directed to YouTube are supported, sorry."}));
+					} else if (/[A-Z]:\\[\s\S]+/.test(query)) {
 						client.on('message', message => {
 							message.member.voiceChannel.join().then(connection => {
 								message.reply('Playing track.');
 								message.delete();
 
-								const dispatcher = connection.playFile(cmd['query']);
-							}).catch(console.log);
+								const dispatcher = connection.playFile(query);
+								
+								callback(exceptions);
+							}).catch((err)=>{
+								err.severity = 5;
+								callback(exceptions.concat(err));
+							});
 						});
 					} else {
 						var videoData = [];
-						
 						const youtube = lib.gapi.google.youtube('v3');
 						
-						youtube.search.list({q:cmd['query'],maxResults:3,safeSeach:false,type:"video",part:'snippet',auth:lib.googleAPIkey},(err,listresponse)=>{
-							if (err) {throw err};
+						youtube.search.list({q:query,maxResults:3,safeSeach:false,type:"video",part:'snippet',auth:lib.googleAPIkey},(err,listresponse)=>{
+							if (err) {
+								err.severity = 5;
+								callback(exceptions.concat(err));
+							} else {
+								listresponse.data.items.forEach((cvar,idx)=>{
+									videoData[idx] = {};
+									videoData[idx].id = cvar.id.videoId;
+									videoData[idx].channelID = cvar.snippet.channelId;
+									videoData[idx].title = cvar.snippet.title;
+									videoData[idx].thumbnail = cvar.snippet.thumbnails.default.url;
+								});
 
-							listresponse.data.items.forEach((cvar,idx)=>{
-								videoData[idx] = {};
-								videoData[idx].id = cvar.id.videoId;
-								videoData[idx].channelID = cvar.snippet.channelId;
-								videoData[idx].title = cvar.snippet.title;
-								videoData[idx].thumbnail = cvar.snippet.thumbnails.default.url;
-							});
+								youtube.videos.list({id:videoData.map(cvar => cvar.id).join(','),part:'contentDetails',auth:lib.googleAPIkey},(err,vidresponse)=>{
+									if (err) {
+										err.severity = 5;
+										callback(exceptions.concat(err));
+									} else {
+										youtube.channels.list({id:videoData.map(cvar => cvar.channelID).join(','),part:'snippet',auth:lib.googleAPIkey},(err,channelresponse)=>{
+											const numEmojis = ['1⃣','2⃣','3⃣'];
+											var embed = {
+												/*title:"Specify Video",*/
+												/*description: "A comprehensive list of every command in " + bot.user.username + "'s vocabulary.",*/
+												color: 2123412,
+												author: {
+													name: `Specify Video By Reacting 🔎`,
+													icon_url: bot.user.avatarURL,
+													url: `https://github.com/MrSp33dy123/${bot.user.username}`
+												},
+												fields: []
+											};
 
-							youtube.videos.list({id:videoData.map(cvar => cvar.id).join(','),part:'contentDetails',auth:lib.googleAPIkey},(err,vidresponse)=>{
-								if (err) {throw err};
-								youtube.channels.list({id:videoData.map(cvar => cvar.channelID).join(','),part:'snippet',auth:lib.googleAPIkey},(err,channelresponse)=>{
-									const numEmojis = ['1⃣','2⃣','3⃣'];
-									var embed = {
-										/*title:"Specify Video",*/
-										/*description: "A comprehensive list of every command in " + bot.user.username + "'s vocabulary.",*/
-										color: 2123412,
-										author: {
-											name: `Specify Video By Reacting 🔎`,
-											icon_url: bot.user.avatarURL,
-											url: `https://github.com/MrSp33dy123/${bot.user.username}`
-										},
-										fields: []
-									};
+											vidresponse.data.items.forEach((cvar,idx)=>{
+												videoData[idx].channelName = channelresponse.data.items.filter(obj => obj.id == videoData[idx].channelID)[0].snippet.title;
+												videoData[idx].duration = lib.convertYTduration(cvar.contentDetails.duration);
 
-									vidresponse.data.items.forEach((cvar,idx)=>{
-										videoData[idx].channelName = channelresponse.data.items.filter(obj => obj.id == videoData[idx].channelID)[0].snippet.title;
-										videoData[idx].duration = lib.convertYTduration(cvar.contentDetails.duration);
-
-										embed.fields.push({
-											name: `${numEmojis[idx]} ${videoData[idx].title}`,
-											value: `${videoData[idx].channelName} – ${lib.displayDuration(videoData[idx].duration)}`,
-											inline: false
-										});
-									});
-
-									console.log(videoData);
-
-									message.channel.send('',{embed}).then((msg)=>{
-										// Create a reaction collector
-										const collector = msg.createReactionCollector((reaction, user) => {
-											return ((numEmojis.includes(reaction.emoji.name) || reaction.emoji.name == '❌') && user.id == message.author.id);
-										},{max:1});
-
-										collector.on('collect', (reactResp) => {
-											msg.delete();
-											whenSelected(videoData[numEmojis.indexOf(reactResp.emoji.name)]);	
-										});
-
-										msg.react('1⃣').then(()=>{
-											msg.react('2⃣').then(()=>{
-												msg.react('3⃣').then(()=>{
-													msg.react('❌');
+												embed.fields.push({
+													name: `${numEmojis[idx]} ${videoData[idx].title}`,
+													value: `${videoData[idx].channelName} – ${lib.displayDuration(videoData[idx].duration)}`,
+													inline: false
 												});
 											});
+
+											console.log(videoData);
+
+											message.channel.send('',{embed}).then((msg)=>{
+												callback(exceptions);
+												
+												// Create a reaction collector
+												const collector = msg.createReactionCollector((reaction, user) => {
+													return ((numEmojis.includes(reaction.emoji.name) || reaction.emoji.name == '❌') && user.id == message.author.id);
+												},{max:1});
+
+												collector.on('collect', (reactResp) => {
+													collector.stop('collected');
+													whenSelected(videoData[numEmojis.indexOf(reactResp.emoji.name)]);	
+												});
+												
+												collector.on('end',(reactResp, code)=>{
+													msg.delete();
+													if (code != 'collected' && code != 'timeout') {
+														code.severity = 5;
+														callback(exceptions.concat(code));
+														console.log('Something happened: ' + code);
+													}
+												});
+												
+												setTimeout(()=>{
+													collector.stop('timeout');
+												},300000);
+
+												msg.react('1⃣').then(()=>{
+													msg.react('2⃣').then(()=>{
+														msg.react('3⃣').then(()=>{
+															msg.react('❌');
+														});
+													});
+												});
+											}).catch((err)=>{
+												code.severity = 5;
+												callback(exceptions.concat(err));
+											});
+	//										lib.ytdl.getInfo(`https://www.youtube.com/watch?v=${vidIDs[0]}`,(err,info)=>{
+	//											console.log(info);
+	//										});
 										});
-									});
-//										lib.ytdl.getInfo(`https://www.youtube.com/watch?v=${vidIDs[0]}`,(err,info)=>{
-//											console.log(info);
-//										});
+									}
 								});
-							});
+							}
 						});
 					}
-					message.channel.stopTyping();
 				} else {
-					new lib.ObvErr('errcustom',["The AFK channel isn't really suitable for jamming out, mah dude."]);
+					callback(exceptions.concat({severity:4,code:'inAFK',message:"The AFK channel isn't really suitable for jamming out, mah dude."}));
 				}
 			} else {
-				new lib.ObvErr('errcustom',["You need to be in a voice channel to listen to your sick beats, fam."]);
+				callback(exceptions.concat({severity:4,code:'notInVoiceChannel',message:"You need to be in a voice channel to listen to your sick beats, fam."}));
 			}
+			
 			function whenSelected(video) {
 				if (video !== undefined) {
 					sql.query(`SELECT ID, VideoData FROM QueuedTracks WHERE ServerID = ?; INSERT INTO QueuedTracks (ServerID, VoiceID, TextID, MessageID, VideoData) VALUES (?,?,?,?,?);`, 
 							  [message.guild.id, message.guild.id, message.member.voiceChannel.id, message.channel.id, message.id, JSON.stringify(video)],
 					function(err, rows, fields) {
-						if (err) {throw err};
-
-						if (rows[0].length == 0) {
-							lib.playTrack(rows[1].insertId,rows[0].length,video,message.member.voiceChannel.id,message.channel.id,message.id);
+						if (err) {
+							err.severity = 5;
+							callback(exceptions.concat(err));
 						} else {
-							var queueTime = 0;
-							rows[0].forEach(cvar => {
-								queueTime += JSON.parse(cvar.VideoData).duration;
-							});
-							lib.enqueueTrack(video,message,rows[0].length,queueTime);
+							if (rows[0].length == 0) {
+								lib.playTrack(rows[1].insertId,rows[0].length,video,message.member.voiceChannel.id,message.channel.id,message.id);
+							} else {
+								var queueTime = 0;
+								rows[0].forEach(cvar => {
+									queueTime += JSON.parse(cvar.VideoData).duration;
+								});
+								lib.enqueueTrack(video,message,rows[0].length,queueTime);
+							}
 						}
 					});
 				}
@@ -427,12 +499,29 @@ module.exports = {
             },
             variables:[]
         },
-		process: function(bot, sql, lib, cmd, message) {
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
 			sql.query(`DELETE FROM QueuedTracks WHERE ?;`,{ServerID:message.guild.id},(err, rows, fields) => {
-				const currentConn = bot.voiceConnections.find(cvar => cvar.channel.guild.id == message.guild.id);
-				if (currentConn != undefined) {currentConn.disconnect()};
-				
-				message.channel.send(`It's ok, I'll be quiet now. The entire queue of ${rows.affectedRows} track${lib.isPlural(rows.affectedRows)} was wiped.`);
+				if (err) {
+					err.severity = 5;
+					callback(exceptions.concat(err));
+				} else {
+					const currentConn = bot.voiceConnections.find(cvar => cvar.channel.guild.id == message.guild.id);
+					if (currentConn != undefined) {currentConn.disconnect()};
+					
+					var response;
+					if (rows.affectedRows == 0) {
+						response = "Hm, I'm not sure what queue you speak of...";
+					} else {
+						response = `It's ok, I'll be quiet now. The entire queue of ${rows.affectedRows} track${lib.isPlural(rows.affectedRows)} was wiped.`;
+					}
+					
+					message.channel.send(response).then(()=>{
+						callback(exceptions);
+					}).catch((err)=>{
+						err.severity = 5;
+						callback(exceptions.concat(err));
+					});
+				}
 			});
 		} 
 	},
@@ -442,15 +531,30 @@ module.exports = {
                 description: (bot)=> {return `Skips (or jumps, if you prefer) over the track ${bot.user.username} is currently playing.`},
                 channelTypes: ['text'],
                 permissionLevel: 2,
-                functional: true
+                functional: false
             },
             variables:[]
         },
-		process: function(bot, sql, lib, cmd, message) {
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
 			const currentConn = bot.voiceConnections.find(cvar => cvar.channel.guild.id == message.guild.id);
-			if (currentConn != undefined) {currentConn.disconnect()};
+			if (currentConn != undefined) {
+				currentConn.disconnect().then(()=>{
+					message.channel.send(`🔀 Skipping the current track.`).then(()=>{
+						callback(exceptions);
+					}).catch((err)=>{
+						err.severity = 5;
+						callback(exceptions.concat(err));
+					});
+				}).catch((err)=>{
+					err.severity = 5;
+					callback(exceptions.concat(err));
+				});
+				
+			} else {
+				callback(exceptions.concat({severity:4,code:'noQueueFound',message:"There isn't a queue running at the moment."}));
+			}
 
-			message.channel.send(`🔀 Skipping the current track.`);
+			
 		} 
 	},
 	"queue": {
@@ -463,42 +567,50 @@ module.exports = {
             },
             variables:[]
         },
-		process: function(bot, sql, lib, cmd, message) {
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
 			sql.query(`SELECT VideoData FROM QueuedTracks WHERE ServerID = ?`, [message.guild.id], function(err, rows, fields) {
-				if (err) {throw err};
-
-				if (rows.length == 0) {
-					new lib.ObvErr('errcustom',["What are you talking about? There is no queue."]);
+				if (err) {
+					err.severity = 5;
+					callback(exceptions.concat(err));
 				} else {
-					var totalLength = 0;
-					
-					var embed = {
-						/*title:"Specify Video",*/
-						/*description: "A comprehensive list of every command in " + bot.user.username + "'s vocabulary.",*/
-						color: 15587096,
-						author: {
-							name: `Queued Tracks 🗃️`,
-							icon_url: bot.user.avatarURL,
-							url: `https://github.com/MrSp33dy123/${bot.user.username}`
-						},
-						footer: {},
-						fields: []
-					};
-					
-					rows.forEach((cvar,idx)=>{
-						cvar = JSON.parse(cvar.VideoData);
-						totalLength += cvar.duration;
-						
-						embed.fields.push({
-							name: `\`${idx+1}\` - ${cvar.title}`,
-							value: `${lib.displayDuration(cvar.duration)} – ${cvar.channelName}`,
-							inline: false
+					if (rows.length == 0) {
+						callback(exceptions.concat({severity:4,code:'noQueue',message:"What are you talking about? There is no queue."}));
+					} else {
+						var totalLength = 0;
+
+						var embed = {
+							/*title:"Specify Video",*/
+							/*description: "A comprehensive list of every command in " + bot.user.username + "'s vocabulary.",*/
+							color: 15587096,
+							author: {
+								name: `Queued Tracks 🗃️`,
+								icon_url: bot.user.avatarURL,
+								url: `https://github.com/MrSp33dy123/${bot.user.username}`
+							},
+							footer: {},
+							fields: []
+						};
+
+						rows.forEach((cvar,idx)=>{
+							cvar = JSON.parse(cvar.VideoData);
+							totalLength += cvar.duration;
+
+							embed.fields.push({
+								name: `\`${idx+1}\` - ${cvar.title}`,
+								value: `${lib.displayDuration(cvar.duration)} – ${cvar.channelName}`,
+								inline: false
+							});
 						});
-					});
-					
-					embed.footer.text = `${rows.length} track${lib.isPlural(rows.length)} | ${lib.displayDuration(totalLength)} duration`;
-					
-					message.channel.send('',{embed});
+
+						embed.footer.text = `${rows.length} track${lib.isPlural(rows.length)} | ${lib.displayDuration(totalLength)} duration`;
+
+						message.channel.send('',{embed}).then(()=>{
+							callback(exceptions);
+						}).catch((err)=>{
+							err.severity = 5;
+							callback(exceptions.concat(err));
+						});
+					}
 				}
 			});
 		} 
@@ -513,8 +625,13 @@ module.exports = {
             },
             variables:[]
         },
-		process: function(bot, sql, lib, cmd, message) {
-			message.reply('Pong!');
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			message.reply('Pong!').then(()=>{
+				callback(exceptions);
+			}).catch((err)=>{
+				err.severity = 5;
+				callback(exceptions.concat(err));
+			});
 		} 
 	},
 	"roll": {
@@ -530,55 +647,62 @@ module.exports = {
                 ['count','The quantity of random numbers you want.', true, /\d+/, '1']
             ]
         },
-        process: function(bot, SQLconn, lib, cmd, message) {
-            cmd['count'] = cmd['count'].match(/\d+/);
-            cmd['bounds'] = /(-?\d+)[-,]?(-?\d+)/.exec(cmd['bounds']);
-            cmd['bounds'].shift();
-            cmd['bounds'].forEach((cvar,idx,arr) => {
-                arr[idx] = parseInt(cvar);
-            });
+        process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+            var count = cmd['count'].match(/\d+/);
+            var bounds = /(-?\d+)[-,]?(-?\d+)/.exec(cmd['bounds']);
+			
+            bounds.shift();
+            bounds.forEach((cvar,idx,arr) => {arr[idx] = parseInt(cvar)});
             
-            if (cmd['bounds'][0] > cmd['bounds'][1]) {
-				new lib.ObvErr('errcustom',['Minimum limit cannot be greater than maximum limit.']);
-            }
-            if (cmd['count'] < 1 || cmd['count'] > 2000) {
-				new lib.ObvErr('errcustom',['Random number count cannot exceed Discord\'s 2,000 character message limit.']);
-            }
-            if (cmd['bounds'][0] < -1152921504606846976 || cmd['bounds'][1] > 1152921504606846976) {
-				new lib.ObvErr('errcustom',['For arbitrary reasons, I have a base-2 cap on how large the bounds can actually be. Please choose numbers that are less insane.']);
-            }
-                    
-            const emojiMap = [
-                [0,":zero:"],
-                [1,":one:"],
-                [2,":two:"],
-                [3,":three:"],
-                [4,":four:"],
-                [5,":five:"],
-                [6,":six:"],
-                [7,":seven:"],
-                [8,":eight:"],
-                [9,":nine:"],
-                [10,":keycap_ten:"]
-            ];
-            
-            var randNums = "";
-            if (cmd['bounds'][1] > 10 || cmd['bounds'][0] < 0) {
-                for (var count = 0; count < cmd['count']; count++) {
-                    randNums += "`" + lib.getRand(cmd['bounds']) + '` ';
-                }
-            } else {
-                for (var count = 0; count < cmd['count']; count++) {
-                    randNums += emojiMap[lib.getRand(cmd['bounds'])][1];
-                }
-            }
-            
-            if (randNums.length > 2000) {
-                throw new Error('The resulting output would exceed the 2,000 character limit of Discord. Please reduce the count, or quantity of digits per number.');
-            }
-            
-            message.reply("_Let's roll the dice..._");
-            message.channel.send(randNums)
+            if (bounds[0] > bounds[1]) {
+				callback(exceptions.concat({severity:4,code:'minNums',message:'Minimum limit cannot be greater than maximum limit.'}));
+            } else if (count < 1 || count > 2000) {
+				callback(exceptions.concat({severity:4,code:'maxNums',message:'Random number count cannot exceed Discord\'s 2,000 character message limit.'}));
+            } else if (bounds[0] < -1152921504606846976 || bounds[1] > 1152921504606846976) {
+				callback(exceptions.concat({severity:4,code:'boundsLimit',message:'For arbitrary reasons, I have a base-2 cap on how large the bounds can actually be. Please choose numbers that are less insane.'}));
+			} else {
+				var randNums = "";
+				const emojiMap = [
+					[0,":zero:"],
+					[1,":one:"],
+					[2,":two:"],
+					[3,":three:"],
+					[4,":four:"],
+					[5,":five:"],
+					[6,":six:"],
+					[7,":seven:"],
+					[8,":eight:"],
+					[9,":nine:"],
+					[10,":keycap_ten:"]
+				];
+				
+				if (bounds[1] > 10 || bounds[0] < 0) {
+					for (var i = 0; i < count; i++) {
+						randNums += "`" + lib.getRand(bounds) + '` ';
+					}
+				} else {
+					for (var i = 0; i < count; i++) {
+						randNums += emojiMap[lib.getRand(bounds)][1];
+					}
+				}
+
+				if (randNums.length > 1990) {
+					callback(exceptions.concat({severity:4,code:'lengthLimit',message:'The resulting output would exceed the 2,000 character limit of Discord. Please reduce the count, or quantity of digits per number.'}));
+				} else {
+					message.reply("_Let's roll the dice..._").then(()=>{
+						message.channel.send(randNums).then(()=>{
+							callback(exceptions);
+						}).catch((err)=>{
+							err.severity = 5;
+							callback(exceptions.concat(err));
+						});
+					}).catch((err)=>{
+						err.severity = 5;
+						callback(exceptions.concat(err));
+					});;
+					
+				}
+			}
         }
     },
     "become": {
@@ -590,58 +714,86 @@ module.exports = {
                 functional: false
             },
             variables:[
-                ['identity', "The names 'Oblivion', 'Ariadne', 'Luna', 'James', or an @mention of the account that you want the bot to become.", false, /(?:<@!?\d+>)|(?:[^\d\W]+)/]
+                ['identity', "The names 'Oblivion', 'Suzy', 'Ariadne', 'Luna', 'James', or an @mention of the account that you want the bot to become.", true, /(?:<@!?\d+>)|(?:^[A-Za-z]+$)/,'Suzy']
             ]
         },
-		process: function(bot, SQLconn, lib, cmd, message) {
-            var identityProperties = {
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			var identity = cmd['identity'];
+			
+			// Full error checking still to be implemented
+            const identityProperties = {
                 oblivion:['>help','_We are on the outside, as on the inside._'],
+				suzy:['>help',"_I think you've still got lightning in you._"],
                 james:['Coolio, yo!','_Orange you glad to see me?_'],
                 luna:['Tranquility','_The Eagle has Landed_'],
                 ariadne:['Time','_We have to go deeper..._'],
                 mercy:['Overwatch','_Heroes never die!_']
             };
-            
-            function setPresencePreset(name) {
-				bot.user.setAvatar(`bot/assets/${name}-opt.jpg`).then(()=>{
-					bot.user.setGame(identityProperties[name][0]);
-					bot.guilds.array().forEach((guild) => {
-						guild.member(bot.user).setNickname(name.capFL());
-					});
-					// Issues with final message being sent before the username has been changed.
-					message.channel.send(identityProperties[name][1]);
-					message.channel.stopTyping();
-				}).catch(err => {
-					if (err.message == 'You are changing your avatar too fast. Try again later.') {
-						console.log(err);
-						message.reply("Discord's servers aren't really onboard with me changing disguises this rapidly. Clearly they have no appreciation of true slipperyness. Sorry.");
-					}
-					message.channel.stopTyping();
-				});
+			
+			const mentionRegex = /(?:<@!?(\d+)>)/;
+			if (mentionRegex.test(identity)) {
+                setPresenceUser(message);
+            } else {
+                setPresencePreset(identity.toLowerCase());
             }
             
-			message.channel.startTyping();
-			const mentionRegex = /(?:<@!?(\d+)>)/;
-            if (mentionRegex.test(cmd['identity'])) {
-                var target = message.mentions.members.get(cmd['identity'].match(mentionRegex)[1]);
+            function setPresencePreset(name) {
+				if (identityProperties[name] !== undefined) {
+					bot.user.setAvatar(`bot/assets/${name}-opt.jpg`).then(()=>{
+						bot.user.setActivity(identityProperties[name][0]);
+						bot.guilds.array().forEach((guild) => {
+							guild.member(bot.user).setNickname(name.capFL());
+						});
+
+						// Issues with final message being sent before the username has been changed.
+						setTimeout(()=>{
+							message.channel.send(identityProperties[name][1]).then(()=>{
+								callback(exceptions);
+							}).catch((err)=>{
+								err.severity = 5;
+								callback(exceptions.concat(err));
+							});
+						},150);
+					}).catch(err => {
+						if (err.message == 'You are changing your avatar too fast. Try again later.') {
+							callback(exceptions.concat({severity:4,code:'updateLimit',message:"Discord's servers aren't really onboard with me changing disguises this rapidly. Clearly they have no appreciation of true slipperyness. Sorry."}));
+						} else {
+							err.severity = 5;
+							callback(exceptions.concat(err));
+						}
+					});
+				} else {
+					callback(exceptions.concat({severity:4,code:'invalidPreset',message:"I don't recognize that preset, sorry."}));
+				}
+            }
+			
+			function setPresenceUser(message) {
+				var target = message.mentions.members.get(identity.match(mentionRegex)[1]);
                 
 				// Preferrably use auto-error system, however ATM it doesn't seem to work
 				bot.user.setAvatar(target.user.displayAvatarURL).then(()=>{
 					bot.guilds.array().forEach((guild) => {
 						guild.member(bot.user).setNickname(target.displayName);
 					});
-					message.channel.send("_This command never happened. They'll never know._");
-					message.channel.stopTyping();
+					
+					// This is a slight bodge. The optimal method would use promises in the forEach
+					setTimeout(()=>{
+						message.channel.send("_This command never happened. They'll never know._").then(()=>{
+							callback(exceptions);
+						}).catch((err)=>{
+							err.severity = 5;
+							callback(exceptions.concat(err));
+						});
+					},150);
 				}).catch(err => {
-					if (err.message == 'You are changing your avatar too fast. Try again later.') {
-						console.log(err);
-						message.reply("Discord's servers aren't really onboard with me changing disguises this rapidly. Clearly they have no appreciation of true slipperyness. Sorry.");
+					if (err.code == 50035) {
+						callback(exceptions.concat({severity:4,code:'updateLimit',message:"Discord's servers aren't really onboard with me changing disguises this rapidly. Clearly they have no appreciation of true slipperyness. Sorry."}));
+					} else {
+						err.severity = 5;
+						callback(exceptions.concat(err));
 					}
-					message.channel.stopTyping();
 				});
-            } else {
-                setPresencePreset(cmd['identity'].toLowerCase());
-            }
+			}
 		}
     },
 	"lenny": {
@@ -654,9 +806,15 @@ module.exports = {
             },
             variables:[]
         },
-		process: function(bot, SQLconn, lib, cmd, message) {
-            message.delete();
-			message.channel.send('( ͡° ͜ʖ ͡°)');
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+            message.delete().then(()=>{
+				message.channel.send('( ͡° ͜ʖ ͡°)');
+				callback(exceptions);
+			}).catch((err)=>{
+				err.severity = 5;
+				callback(exceptions.concat(err));
+			});
+			
 		}
     },
 	"logging": {
@@ -669,7 +827,7 @@ module.exports = {
             },
             variables:[]
         },
-		process: function(bot, SQLconn, lib, cmd, message) {
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
             var response;
             switch (lib.getRand([1,4])) {
                 case 1:
@@ -684,7 +842,13 @@ module.exports = {
                 case 4:
                     response = "_Y'all know what'd make debugging real easy? Logging._";
             }
-            message.channel.send(response);
+			
+            message.channel.send(response).then(()=>{
+				callback(exceptions);
+			}).catch((err)=>{
+				err.severity = 5;
+				callback(exceptions.concat(err));
+			});
 		}
     },
 };
