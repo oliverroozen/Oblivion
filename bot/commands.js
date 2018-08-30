@@ -191,6 +191,36 @@ module.exports = {
 			});
         }
     },
+	"train": {
+        specification:{
+            command:{
+                description: (bot)=> {return `Uses AI to train a given command.`},
+                channelTypes: ['text','dm','group'],
+                permissionLevel: 2,
+                functional: false
+            },
+            variables:[
+                ['command', "A command to submit training data for.", false, /[^\n]+/],
+				['input', "An input string.", false, /[^\n]+/],
+				['value', "A number between 0 and 100 as an output.", false, /[^\n]+/],
+            ]
+        },
+        process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			var text = cmd['text'];
+			
+            message.delete().then(()=>{
+				message.channel.send(text).then(()=>{
+					callback(exceptions);
+				}).catch((err)=>{
+					err.severity = 5;
+					callback(exceptions.concat(err));
+				});
+			}).catch((err)=>{
+				err.severity = 5;
+				callback(exceptions.concat(err));
+			});
+        }
+    },
 	"sosig": {
 		specification: {
 			command: {
