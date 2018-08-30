@@ -6,7 +6,7 @@ module.exports = {
             command:{
                 description: (bot)=>{return `Reboots ${bot.user.username} to reload source files, clear memory, and recieve any updates. Be careful with this one, fam.`},
                 channelTypes: ['text','dm','group'],
-                permissionLevel: 0,
+                permissionLevel: 'creator',
                 functional: true
             },
             variables:[]
@@ -29,7 +29,7 @@ module.exports = {
 			command:{
                 description: (bot)=>{return "Posts basic information on how to use " + bot.user.username + ". Also posts the details of how to use a specific command."},
                 channelTypes: ['text','dm','group'],
-                permissionLevel: 3,
+                permissionLevel: 'trusted',
                 functional: true
             },
             variables:[
@@ -62,10 +62,14 @@ module.exports = {
 
 						commandSpec.variables.forEach((spec)=>{
 							var optional = "";
+							var dfult = "";
+							
 							if (spec[2]) {optional = " `optional`"};
+							if (spec[4]) {dfult = " `default " + spec[4] + "`"};
+							
 							embed.fields.push({
 								name: spec[0],
-								value: (spec[1] + optional),
+								value: (spec[1] + optional + dfult),
 								inline: true
 							});
 						});
@@ -91,7 +95,7 @@ module.exports = {
             command:{
                 description: (bot)=> {return `Deletes a given quantity of preceeding messages in the channel.`},
                 channelTypes: ['text','group'],
-                permissionLevel: 1,
+                permissionLevel: 'owner',
                 functional: false
             },
             variables:[
@@ -164,7 +168,7 @@ module.exports = {
             command:{
                 description: (bot)=> {return `Repeats a given phrase into the channel it was sent.`},
                 channelTypes: ['text','dm','group'],
-                permissionLevel: 2,
+                permissionLevel: 'admin',
                 functional: true
             },
             variables:[
@@ -192,7 +196,7 @@ module.exports = {
 			command: {
                 description: (bot)=>{return "Returns a decisive report on the validity of any particular thing."},
                 channelTypes: ['text','dm','group'],
-                permissionLevel: 3,
+                permissionLevel: 'trusted',
                 functional: true
             },
 			variables: []
@@ -211,7 +215,7 @@ module.exports = {
             command:{
                 description: (bot)=> {return `Posts a list of all commands that ${bot.user.username} can use, to your PM.`},
                 channelTypes: ['text','dm','group'],
-                permissionLevel: 2,
+                permissionLevel: 'trusted',
                 functional: true
             },
             variables:[]
@@ -266,7 +270,7 @@ module.exports = {
             command:{
                 description: (bot)=> {return `Brings honk upon everyone in the voice channel.`},
                 channelTypes: ['text'],
-                permissionLevel: 2,
+                permissionLevel: 'trusted',
                 functional: true
             },
             variables:[]
@@ -275,23 +279,28 @@ module.exports = {
 			const hornPath = ['mlg-airhorn-1.mp3','lorde-perfect-places.mp3'];
 			
 			if (message.member.voiceChannel) {
-				message.member.voiceChannel.join().then(connection => {
-					message.channel.send('***BAAARRRRRRRRRPP!!!***').then((msg)=>{
-						const dispatcher = connection.playFile(`${__dirname}/assets/${hornPath[0]}`);
-						dispatcher.on('end',()=>{
-							connection.disconnect();
-							msg.delete().then(()=>{
-								callback(exceptions);
+				const currentConn = bot.voiceConnections.find(cvar => cvar.channel.guild.id == message.guild.id);
+				if (currentConn == undefined) {
+					message.member.voiceChannel.join().then(connection => {
+						message.channel.send('***BAAARRRRRRRRRPP!!!***').then((msg)=>{
+							const dispatcher = connection.playFile(`${__dirname}/assets/${hornPath[0]}`);
+							dispatcher.on('end',()=>{
+								connection.disconnect();
+								msg.delete().then(()=>{
+									callback(exceptions);
+								});
+							});
+							dispatcher.on('error',(error)=>{
+								error.severity = 5;
+								callback(exceptions.concat(error));
 							});
 						});
-						dispatcher.on('error',(error)=>{
-							error.severity = 5;
-							callback(exceptions.concat(error));
-						});
+					}).catch((err)=>{
+						callback(exceptions.concat({severity:4,code:'couldntJoinVoice',message:`There was an error joining the voice channel, sorry! \`${err}\``}));
 					});
-				}).catch((err)=>{
-					callback(exceptions.concat({severity:4,code:'couldntJoinVoice',message:`There was an error joining the voice channel, sorry! \`${err}\``}));
-				});
+				} else {
+					callback(exceptions.concat({severity:4,code:'botPlayingQueue',message:"I can only do one thing at a time, and right now, I'm playing music. Sorry."}));
+				}
 			} else {
 				callback(exceptions.concat({severity:4,code:'notInVoiceChannel',message:"You need to be in a voice channel first, bruh."}));
 			}
@@ -302,7 +311,7 @@ module.exports = {
             command:{
                 description: (bot)=> {return `Joins your voice channel and/or appends a track to the queue.`},
                 channelTypes: ['text'],
-                permissionLevel: 2,
+                permissionLevel: 'trusted',
                 functional: true
             },
             variables:[
@@ -494,7 +503,7 @@ module.exports = {
             command:{
                 description: (bot)=> {return `Stops playing the current track, and clears the queue.`},
                 channelTypes: ['text'],
-                permissionLevel: 2,
+                permissionLevel: 'trusted',
                 functional: true
             },
             variables:[]
@@ -530,7 +539,7 @@ module.exports = {
             command:{
                 description: (bot)=> {return `Skips (or jumps, if you prefer) over the track ${bot.user.username} is currently playing.`},
                 channelTypes: ['text'],
-                permissionLevel: 2,
+                permissionLevel: 'trusted',
                 functional: false
             },
             variables:[]
@@ -553,8 +562,6 @@ module.exports = {
 			} else {
 				callback(exceptions.concat({severity:4,code:'noQueueFound',message:"There isn't a queue running at the moment."}));
 			}
-
-			
 		} 
 	},
 	"queue": {
@@ -562,7 +569,7 @@ module.exports = {
             command:{
                 description: (bot)=> {return `Posts a list of all the queued tracks on the server.`},
                 channelTypes: ['text'],
-                permissionLevel: 2,
+                permissionLevel: 'trusted',
                 functional: false
             },
             variables:[]
@@ -620,7 +627,7 @@ module.exports = {
             command:{
                 description: (bot)=> {return `Responds to 'ping' with 'pong'.`},
                 channelTypes: ['text','dm','group'],
-                permissionLevel: 2,
+                permissionLevel: 'trusted',
                 functional: true
             },
             variables:[]
@@ -639,7 +646,7 @@ module.exports = {
             command:{
                 description: (bot)=> {return `Gets you a random number.`},
                 channelTypes: ['text','dm','group'],
-                permissionLevel: 2,
+                permissionLevel: 'trusted',
                 functional: true
             },
             variables:[
@@ -710,7 +717,7 @@ module.exports = {
             command:{
                 description: (bot)=> {return `Transforms ${bot.user.username} into your identity of choice`},
                 channelTypes: ['text'],
-                permissionLevel: 1,
+                permissionLevel: 'admin',
                 functional: false
             },
             variables:[
@@ -796,12 +803,163 @@ module.exports = {
 			}
 		}
     },
+	"perms": {
+        specification:{
+            command:{
+                description: (bot)=> {return `Gets and sets the invididual or role permissions for ${bot}`},
+                channelTypes: ['text','group'],
+                permissionLevel: 'owner',
+                functional: false
+            },
+            variables:[
+				['mode', "'Get' or 'set' - whether you want to see the current settings or assign new ones.", false, /^(get|set)$/],
+				['target', "An @user or @role that you want to assign the permissions to.", false, /(?:<@[&!]?\d+>)/],
+				['permission', "The level to set the target's permissions to. Either a number or code name.", true, /(?:<@!?\d+>)|(?:^[A-Za-z]+$)/]
+			]
+        },
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			const permLevels = [
+				'everyone',
+				'trusted',
+				'admin',
+				'owner',
+				'creator'
+			];
+			
+			/*CREATE TABLE IF NOT EXISTS PermissionLevels (
+			ID INT UNSIGNED AUTO_INCREMENT,
+			RoleID BIGINT UNSIGNED,
+			UserID BIGINT UNSIGNED,
+			ServerID BIGINT UNSIGNED NOT NULL,
+			Permissions TINYINT UNSIGNED NOT NULL,
+			PRIMARY KEY (ID)*/
+			
+			var mode = cmd['mode'].toLowerCase();
+			var target = cmd['target'];
+			var permission = cmd['permission'];
+			var authorPerm;
+			
+            if (mode == 'set') {
+				var resolvedPerm;
+				if (permLevels[permission] != undefined) {
+					resolvedPerm = permLevels[permission];
+				} else {
+					resolvedPerm = permission.toLowerCase();
+				}
+				
+				
+				
+				if (resolvedPerm)
+				
+				var id;
+				if (id = target.match(/<@&(\d+)>/)[1]) {
+					var role;
+					if (role = message.guild.roles.get(id) != undefined) {
+						
+					} else {
+						callback(exceptions.concat({severity:4,code:'roleNotFound',message:"I'm not sure that role exists, fam."}));
+					}
+				} else {
+					// User
+				}
+			} else {
+				
+			}
+			
+			function resolvePerms(userID,response) {
+				// Get the user's perm level to check for owner status
+				if (userID === lib.botCreator) {
+					response(5);
+				} else {
+					SQLconn.query(`SELECT Permissions FROM PermissionLevels WHERE UserID = ? LIMIT 1`,[userID],(err, rows, fields) => {
+						if (err) {
+							err.severity = 5;
+							return(err);
+						} else {
+							response(rows[0]);
+						}
+						
+					});
+				}
+			}
+			
+			
+			
+            message.channel.send(response).then(()=>{
+				callback(exceptions);
+			}).catch((err)=>{
+				err.severity = 5;
+				callback(exceptions.concat(err));
+			});
+		}
+    },
+	"patchnotes": {
+        specification:{
+            command:{
+                description: (bot)=> {return `Posts the information of ${bot.user.username}'s latest, or a historic, patch.`},
+                channelTypes: ['text','dm','group'],
+                permissionLevel: 'trusted',
+                functional: false
+            },
+            variables:[
+				['patch', "A specific patch to see.", true, /[^]+/,'latest']
+			]
+        },
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			// Incomplete
+            callback(exceptions);
+		}
+    },
+	"sortvoice": {
+        specification:{
+            command:{
+                description: (bot)=> {return `Posts the information of ${bot.user.username}'s latest, or a historic, patch.`},
+                channelTypes: ['text','dm','group'],
+                permissionLevel: 'trusted',
+                functional: false
+            },
+            variables:[]
+        },
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			var voiceChannels = message.guild.channels.filter((channel)=>{
+				return channel.type == 'voice';
+			});
+			
+			var voiceMembers = [];
+			voiceChannels.forEach((channel)=>{
+				voiceMembers = voiceMembers.concat(channel.members);
+			});
+			
+			var voiceChannelQuantity = voiceChannels.length;
+			
+			if (voiceChannels.has(message.guild.afkChannel)) {voiceChannelQuantity--};
+			
+			console.log(typeof voiceMembers);
+			
+			if (voiceMembers.length <= 1) {
+				var games = {};
+				voiceMembers.forEach((member)=>{
+					var game = member.presence.game.name;
+					games[game] = (games[game] || 0)+1;
+				});
+			} else {
+				callback(exceptions.concat({severity:4,code:'notEnoughMembers',message:`I'm not sure why you need me to sort literally ${lib.numToWord(voiceMembers.length)} member${lib.isPlural(voiceMembers.length)}. Where would you want me to put them?`}));
+			}
+			
+			
+			console.log('Numbers are as follows:');
+			console.log(voiceChannelQuantity);
+			console.log(games);
+			
+            callback(exceptions);
+		}
+    },
 	"lenny": {
         specification:{
             command:{
                 description: (bot)=> {return `Fetches the user a splendid rendition of the Lenny Face.`},
                 channelTypes: ['text','dm','group'],
-                permissionLevel: 2,
+                permissionLevel: 'trusted',
                 functional: true
             },
             variables:[]
@@ -822,7 +980,7 @@ module.exports = {
             command:{
                 description: (bot)=> {return `Calls into question the validity of trees and wildlife.`},
                 channelTypes: ['text','dm','group'],
-                permissionLevel: 2,
+                permissionLevel: 'trusted',
                 functional: true
             },
             variables:[]

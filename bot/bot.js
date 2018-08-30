@@ -23,7 +23,8 @@ const lib = {
 	ytdl: require('ytdl-core'),
 	gapi: require('googleapis'),
 	googleAPIkey: privateData.google.apiKey,
-	botAccent: 16771153 // 52685
+	botAccent: 16771153, // 52685
+	botCreator: privateData.discord.creatorID
 };
 const Discord = require('discord.js');
 const mysql = require('mysql');
@@ -66,10 +67,9 @@ SQLconn.connect((err)=>{
 		SQLconn.changeUser({database : 'OblivionBot'}, function(err) {if (err) throw err;});
         SQLconn.query(`CREATE TABLE IF NOT EXISTS SessionStats (
 			SessionID INT UNSIGNED AUTO_INCREMENT, 
-			SessionStart TIMESTAMP DEFAULT NOW(), 
-			SessionEnd TIMESTAMP DEFAULT NOW(), 
-			FatalError TINYINT(1) UNSIGNED, 
-			CommandsCalled SMALLINT UNSIGNED, 
+			SessionStart TIMESTAMP DEFAULT NOW(),
+			SessionEnd TIMESTAMP, 
+			FatalError TINYINT(1) UNSIGNED,
 			ExceptionsHandled SMALLINT UNSIGNED, 
 			PRIMARY KEY (SessionID)
 		)`,(err)=>{
@@ -101,6 +101,24 @@ SQLconn.connect((err)=>{
 		)`,(err)=>{
             if (err) {console.log(err)};
         });
+		SQLconn.query(`CREATE TABLE IF NOT EXISTS PermissionLevels (
+			ID INT UNSIGNED AUTO_INCREMENT,
+			RoleID BIGINT UNSIGNED,
+			UserID BIGINT UNSIGNED,
+			ServerID BIGINT UNSIGNED NOT NULL,
+			Permissions TINYINT UNSIGNED NOT NULL,
+			PRIMARY KEY (ID)
+		)`,(err)=>{
+            if (err) {console.log(err)};
+        });
+		SQLconn.query(`CREATE TABLE IF NOT EXISTS DeafenChannels (
+			ID INT UNSIGNED AUTO_INCREMENT,
+			UserID BIGINT UNSIGNED NOT NULL,
+			ChannelID BIGINT UNSIGNED NOT NULL,
+			PRIMARY KEY (ID)
+		)`,(err)=>{
+            if (err) {console.log(err)};
+        });
         console.log('Database connection online!');
     }
 	bot.login(privateData.discord.botToken);
@@ -112,13 +130,17 @@ bot.on('ready', () => {
     console.log(`Server online! | ${bot.user.username} - (${bot.user.id})`); 
     lib.rl.prompt();
 	
+	SQLconn.query(`INSERT INTO SessionStats VALUES ()`,(err, rows, fields) => {
+		if (err) {console.log(err)};
+	});
+	
 	SQLconn.query(`SELECT * FROM (SELECT ID, VoiceID, TextID, VideoData, MessageID, ServerID FROM QueuedTracks ORDER BY TimeRequested DESC) x GROUP BY ServerID`,(err, rows, fields) => {
 		if (err) {console.log(err)};
 		
 		rows.forEach(cvar => {
 			bot.channels.get(cvar.TextID).send("There was a little accident, but I'm back now fam. Resuming the queue.");
 			lib.playTrack(cvar.ID,cvar.length,JSON.parse(cvar.VideoData),cvar.VoiceID,cvar.TextID,cvar.MessageID);
-		})
+		});
 	});
 });
 
@@ -134,6 +156,7 @@ bot.on('message', (message) => {
 
 bot.on('disconnect', () => {
     console.log('Disconnected!');
+	bot.login(privateData.discord.botToken);
 });
 bot.on('reconnecting', () => {
     console.log('Reconnecting after disconnect...');
@@ -150,6 +173,39 @@ bot.on('guildCreate', (guild) => {
 	
 	guild.systemChannel.send("Hey everyone! It's good to be here. I'm a bot that can help you with a ton of things. Type `>help` to find out more :blush:");
 	guild.systemChannel.send("**To the admins:** For me to work properly, I need to be granted a role with *administrator permissions*. I recommend creating a general `bot` role to do it, but the reason this has to be done at all is so that you have flexibility.");
+});
+
+bot.on('voiceStateUpdate', (oldMember,newMember) => {
+    if (newMember.deaf == true && newMember.voiceChannel != newMember.guild.afkChannel && newMember.voiceChannel != null) {
+		newMember.setVoiceChannel(newMember.guild.afkChannel).then(()=>{
+			SQLconn.query(`INSERT INTO DeafenChannels (UserID,ChannelID) VALUES (?,?)`,[oldMember.id,oldMember.voiceChannelID],(err, rows, fields) => {
+				if (err) {console.log(err)} else {
+					console.log(`Moved ${newMember.displayName} to AFK for deafening.`);
+				}
+			});
+		}).catch((error)=>{
+			console.log(error);
+		});
+	} else if (newMember.deaf == false && oldMember.mute == true && newMember.voiceChannel == newMember.guild.afkChannel) {
+		SQLconn.query(`SELECT ChannelID FROM DeafenChannels WHERE UserID = ?; DELETE FROM DeafenChannels WHERE UserID = ?`,[newMember.id,newMember.id],(err, rows, fields) => {
+			if (err) {console.log(err)} else {
+				if (rows[0].length != 0) {
+					newMember.setVoiceChannel(rows[0][0].ChannelID).then(()=>{
+						console.log(`Moved ${newMember.displayName} back from AFK.`);
+					}).catch((err)=>{
+						console.log(err);
+					});
+				} else {
+					console.log("Couldn't find the channel that the user was previously in...");
+				}
+			}
+		});
+	}
+});
+
+bot.on('error', () => {
+    console.log('Some kind of error was encountered by the client...');
+	bot.login(privateData.discord.botToken);
 });
 
 function processInput(message) {
@@ -207,7 +263,12 @@ function processInput(message) {
 					
 					message.channel.stopTyping();
 					execTime = new Date().getTime() - execTime;
-					console.log(`Response time: ${execTime}ms`);
+					if (execTime > 16777215) {
+						execTime = 16777215;
+						console.log(`Response time: ${execTime}ms. Had to be cut to fit in database.`);
+					} else {
+						console.log(`Response time: ${execTime}ms`);
+					};
 					
 					SQLconn.query(`INSERT INTO CommandStats (MessageID, ChannelID, Data, Initiated, ExecTime, State) VALUES (?,?,?,NOW(),?,?)`,
 						  [message.id, message.channel.id, JSON.stringify(commandInfo), execTime, requestState],
@@ -307,7 +368,7 @@ function collateCommandVariables(message,commandInfo,exceptions,inputSplit,callb
 		
 		commands[commandInfo['cmd']].specification.variables.forEach((cvar,idx,arr)=>{
 			if (typeof commandInfo[cvar[0]] !== 'undefined') {
-				if (!cvar[3].test(commandInfo[cvar[0]])) {
+				if (!cvar[3].test(commandInfo[cvar[0]].toLowerCase())) {
 					exceptions.push({severity:4,code:'invalidVar',message:`Sorry, \`${cvar[0]}\` must be ${cvar[1].lowercaseFL()}`});
 				}
 			} else {
@@ -330,7 +391,7 @@ function collateCommandVariables(message,commandInfo,exceptions,inputSplit,callb
 				});
 			} catch (error) {
 				error.severity = 5;
-				callback(commandInfo,exceptions.push(error));
+				callback(commandInfo,exceptions.concat(error));
 			}
 		}
 	}
@@ -576,6 +637,19 @@ lib.displayDuration = function displayDuration(duration) {
 	return output.toLowerCase();
 }
 
+lib.numToWord = function numToWord(num) {
+	switch (num) {
+		case 0:
+			return 'zero';
+			break;
+		case 1:
+			return 'one';
+			break;
+		default:
+			return 'NaN';
+	}
+		
+}
 lib.isPlural = function isPlural(quantity) {
 	if (quantity == 0 || quantity > 1) {
 		return 's';

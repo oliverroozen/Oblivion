@@ -1,0 +1,18 @@
+{
+	"0.0.1":{
+		"title":"Good news!",
+		"description":"Good news indeed. As Cameron so valiantly requested, Suzy now watches when people mute themselves and sit clogging up the voice channels, and moves them to AFK. She'll also move you back, if you ask nicely. This patchnote system is also one of the additions; it makes the new and shiny features even shinier.\n My creators have some exciting stuff in the works. It starts with A and ends with I.",
+		"features":[
+			{
+				"name":"deafen-afk",
+				"type":"Passive",
+				"description":"If someone mutes themselves in a voice channel, they're automatically moved to the AFK channel to reduce clutter. Upon unmuting, they're moved back."
+			},
+			{
+				"name":"patchnotes",
+				"type":"Command",
+				"description":"Displays the patch notes of a given patch, defaulting to the latest."
+			}
+		]
+	}
+}
