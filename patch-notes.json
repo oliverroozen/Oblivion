@@ -15,4 +15,11 @@
 			}
 		]
 	}
+	"0.0.2":{
+	title:"I've forgotten how this works.",
+	description:"In the time between the last update and now, I've lost track of where the project was, and the overall state of the union. Please stand by."
+	features:[
+	
+	]
+}
 }
