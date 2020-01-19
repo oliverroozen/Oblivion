@@ -33,7 +33,6 @@
     "opusscript": "0.0.6",
     "request": "^2.88.0",
     "sodium": "github:paixaop/node-sodium",
-    "vui-ad-hoc-alexa-recognizer": "^1.5.109",
     "ytdl-core": "^0.24.0"
   },
   "scripts": {

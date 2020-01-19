@@ -214,6 +214,8 @@ function processInput(message) {
             if (message.content.charAt(0) == ">") {
 				var requestState = "incomplete";
                 var execTime = new Date().getTime();
+				
+				console.log('Starting to type...');
 				message.channel.startTyping();
 				
 				establishTargetCommand(message,(commandInfo,exceptions)=>{
@@ -261,7 +263,10 @@ function processInput(message) {
 						requestState = 'success';
 					}
 					
-					message.channel.stopTyping();
+					setTimeout(()=>{
+						message.channel.stopTyping();
+					},500);
+					
 					execTime = new Date().getTime() - execTime;
 					if (execTime > 16777215) {
 						execTime = 16777215;
@@ -475,7 +480,7 @@ function findSimmilarCommand(command) {
     for (var key in commands) {
         if (commands.hasOwnProperty(key)) {
             if (commands[key].specification.command.functional) {
-                sorted.push([levDist(command,key),key]);
+                sorted.push([lib.levDist(command,key),key]);
             }
         }
     }
@@ -511,7 +516,7 @@ String.prototype.capFL = function() {
 lib.getRand = function(bounds) {
     return Math.round(Math.random() * (bounds[1] - bounds[0])) + bounds[0];
 }
-function levDist(str1, str2) {
+lib.levDist = function levDist(str1, str2) {
     const l1 = str1.length;
     const l2 = str2.length;
     
@@ -680,7 +685,9 @@ lib.enqueueTrack = function enqueueTrack(video,message,queueLength,queueTime) {
 				url: `https://github.com/MrSp33dy123/${bot.user.username}`
 			},
 			thumbnail: {
-				url: video.thumbnail
+				url: video.thumbnail.url,
+				width: video.thumbnail.width,
+				height: video.thumbnail.height,
 			},
 			footer: {
 				text: `Added by ${guildmember.displayName}`
@@ -706,7 +713,9 @@ lib.playTrack = function playTrack(key,queueLength,video,voiceID,textID,messageI
 			url: `https://github.com/MrSp33dy123/${bot.user.username}`
 		},
 		thumbnail: {
-			url: video.thumbnail
+			url: video.thumbnail.url,
+			width: video.thumbnail.width,
+			height: video.thumbnail.height,
 		},
 		footer: {}
 	};

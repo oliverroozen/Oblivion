@@ -1,5 +1,5 @@
 // Use module.exports to refer to command list
-// Permission levels: 0 = Bot creator, 1 = Server admin(s), 2 = Standard Memeber 3 = Demerit User
+// Permission levels: 0 = Bot creator, 1 = Server admin(s), 2 = Standard Member 3 = Demerit User
 module.exports = {
     "restart": {
 		specification:{
@@ -21,6 +21,33 @@ module.exports = {
                 console.log("I'll be back.");
                 process.send('restart');
 				callback(exceptions);
+            }
+		}
+    },
+	"shutdown": {
+		specification:{
+            command:{
+                description: (bot)=>{return `Shuts down ${bot.user.username} if there is the unlikely event of some sort of fire.`},
+                channelTypes: ['text','dm','group'],
+                permissionLevel: 'creator',
+                functional: false
+            },
+            variables:[]
+        },
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+            if (message.channel.type != undefined) {
+				message.channel.send("***See you on the other side...***").then((msg) => {
+					callback(exceptions);
+					bot.destroy().then(()=>{
+						process.send('shutdown');
+					});
+                });
+            } else {
+                console.log("Goodbye.");
+				callback(exceptions);
+				bot.destroy().then(()=>{
+					process.send('shutdown');
+				});
             }
 		}
     },
@@ -357,7 +384,7 @@ module.exports = {
 					// This would be where code to handle the queue would go
 					if (/https?:\/\/\w+.youtube./.test(query)) {
 						var videoData = {};
-						videoData.id = query.match(/https?:\/\/\w+.youtube.com\/watch\?v=(\w{11})/)[1];
+						videoData.id = query.match(/https?:\/\/\w+.youtube.com\/watch\?v=([\w-]{11})/)[1];
 						
 						const youtube = lib.gapi.google.youtube('v3');
 						youtube.videos.list({id:videoData.id,part:'snippet,contentDetails',auth:lib.googleAPIkey},(err,vidresponse)=>{
@@ -365,20 +392,20 @@ module.exports = {
 								err.severity = 5;
 								callback(exceptions.concat(err));
 							} else {
-								if (vidresponse.pageInfo.totalResults === 0) {
+								if (vidresponse.data.pageInfo.totalResults === 0) {
 									callback(exceptions.concat({severity:4,code:'invalidURL',message:"That appears to be an invalid URL. Couldn't find anything."}));
 								} else {
-									videoData.channelID = vidresponse.items[0].snippet.channelId;
-									videoData.title = vidresponse.items[0].snippet.title;
-									videoData.thumbnail = vidresponse.items[0].snippet.thumbnails.default.url;
-									videoData.duration = lib.convertYTduration(vidresponse.items[0].contentDetails.duration);
+									videoData.channelID = vidresponse.data.items[0].snippet.channelId;
+									videoData.title = vidresponse.data.items[0].snippet.title;
+									videoData.thumbnail = vidresponse.data.items[0].snippet.thumbnails.default;
+									videoData.duration = lib.convertYTduration(vidresponse.data.items[0].contentDetails.duration);
 
 									youtube.channels.list({id:videoData.channelID,part:'snippet',auth:lib.googleAPIkey},(err,channelresponse)=>{
 										if (err) {
 											err.severity = 5;
 											callback(exceptions.concat(err));
 										} else {
-											videoData.channelName = channelresponse.items[0].snippet.title;
+											videoData.channelName = channelresponse.data.items[0].snippet.title;
 											console.log(videoData);
 											whenSelected(videoData);
 										}
@@ -416,7 +443,7 @@ module.exports = {
 									videoData[idx].id = cvar.id.videoId;
 									videoData[idx].channelID = cvar.snippet.channelId;
 									videoData[idx].title = cvar.snippet.title;
-									videoData[idx].thumbnail = cvar.snippet.thumbnails.default.url;
+									videoData[idx].thumbnail = cvar.snippet.thumbnails.default; // Get whole object instead of just URL, then pass to Discord
 								});
 
 								youtube.videos.list({id:videoData.map(cvar => cvar.id).join(','),part:'contentDetails',auth:lib.googleAPIkey},(err,vidresponse)=>{
@@ -742,6 +769,26 @@ module.exports = {
 			}
         }
     },
+	"flamingo": {
+		specification:{
+            command:{
+                description: (bot)=> {return `Automatically queues 'Flamingo' by Kero Kero Bonito.`},
+                channelTypes: ['text'],
+                permissionLevel: 'trusted',
+                functional: true
+            },
+            variables:[]
+        },
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			var song = {
+				'msg': cmd.msg,
+				'cmd': 'flamingo',
+				'query': 'https://www.youtube.com/watch?v=rY-FJvRqK0E'
+			};
+			
+			module.exports['play'].process(bot,sql,lib,song,message,exceptions,callback);
+		} 
+	},
     "become": {
         specification:{
             command:{
@@ -751,7 +798,7 @@ module.exports = {
                 functional: false
             },
             variables:[
-                ['identity', "The names 'Oblivion', 'Suzy', 'Ariadne', 'Luna', 'James', or an @mention of the account that you want the bot to become.", true, /(?:<@!?\d+>)|(?:^[A-Za-z]+$)/,'Suzy']
+                ['identity', "The names 'Oblivion', 'Suzy', 'Ariadne', 'Luna', 'James', or an @mention of the account that you want the bot to become.", true, /(?:^<@!?\d+>$)|(?:^[A-Za-z]+$)/,'Suzy']
             ]
         },
 		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
@@ -769,61 +816,40 @@ module.exports = {
 			
 			const mentionRegex = /(?:<@!?(\d+)>)/;
 			if (mentionRegex.test(identity)) {
-                setPresenceUser(message);
+				var target = message.mentions.members.get(identity.match(mentionRegex)[1]);
+				
+                setPresence(target.displayName,target.user.displayAvatarURL,'',"_This command never happened. They'll never know._");
             } else {
-                setPresencePreset(identity.toLowerCase());
-            }
-            
-            function setPresencePreset(name) {
-				if (identityProperties[name] !== undefined) {
-					bot.user.setAvatar(`bot/assets/${name}-opt.jpg`).then(()=>{
-						bot.user.setActivity(identityProperties[name][0]);
-						bot.guilds.array().forEach((guild) => {
-							guild.member(bot.user).setNickname(name.capFL());
-						});
-
-						// Issues with final message being sent before the username has been changed.
-						setTimeout(()=>{
-							message.channel.send(identityProperties[name][1]).then(()=>{
-								callback(exceptions);
-							}).catch((err)=>{
-								err.severity = 5;
-								callback(exceptions.concat(err));
-							});
-						},150);
-					}).catch(err => {
-						if (err.message == 'You are changing your avatar too fast. Try again later.') {
-							callback(exceptions.concat({severity:4,code:'updateLimit',message:"Discord's servers aren't really onboard with me changing disguises this rapidly. Clearly they have no appreciation of true slipperyness. Sorry."}));
-						} else {
-							err.severity = 5;
-							callback(exceptions.concat(err));
-						}
-					});
+				var name = identity.toLowerCase();
+				var attributes = identityProperties[name];
+				if (attributes !== undefined) {
+					setPresence(name.capFL(),`bot/assets/${name}-opt.jpg`,attributes[0],attributes[1]);
 				} else {
 					callback(exceptions.concat({severity:4,code:'invalidPreset',message:"I don't recognize that preset, sorry."}));
 				}
             }
 			
-			function setPresenceUser(message) {
-				var target = message.mentions.members.get(identity.match(mentionRegex)[1]);
-                
-				// Preferrably use auto-error system, however ATM it doesn't seem to work
-				bot.user.setAvatar(target.user.displayAvatarURL).then(()=>{
+			function setPresence(nickname,avatar,status,entry) {
+				bot.user.setAvatar(avatar).then(()=>{
+					var nicknamePromises = [];
+
+					bot.user.setActivity(status);
 					bot.guilds.array().forEach((guild) => {
-						guild.member(bot.user).setNickname(target.displayName);
+						nicknamePromises.push(guild.member(bot.user).setNickname(nickname));
 					});
-					
-					// This is a slight bodge. The optimal method would use promises in the forEach
-					setTimeout(()=>{
-						message.channel.send("_This command never happened. They'll never know._").then(()=>{
+
+					Promise.all(nicknamePromises).then(()=>{
+						message.channel.send(entry).then(()=>{
 							callback(exceptions);
 						}).catch((err)=>{
 							err.severity = 5;
 							callback(exceptions.concat(err));
 						});
-					},150);
+					}).catch((error)=>{
+						callback(exceptions.concat({severity:4,code:'cantSetNickname',message:"I couldn't set my nickname in all of my servers, sorry."}));
+					});
 				}).catch(err => {
-					if (err.code == 50035) {
+					if (err.message == 'You are changing your avatar too fast. Try again later.') {
 						callback(exceptions.concat({severity:4,code:'updateLimit',message:"Discord's servers aren't really onboard with me changing disguises this rapidly. Clearly they have no appreciation of true slipperyness. Sorry."}));
 					} else {
 						err.severity = 5;
@@ -901,7 +927,7 @@ module.exports = {
 				if (userID === lib.botCreator) {
 					response(5);
 				} else {
-					SQLconn.query(`SELECT Permissions FROM PermissionLevels WHERE UserID = ? LIMIT 1`,[userID],(err, rows, fields) => {
+					sql.query(`SELECT Permissions FROM PermissionLevels WHERE UserID = ? LIMIT 1`,[userID],(err, rows, fields) => {
 						if (err) {
 							err.severity = 5;
 							return(err);
@@ -957,14 +983,15 @@ module.exports = {
 			
 			var voiceMembers = [];
 			voiceChannels.forEach((channel)=>{
-				voiceMembers = voiceMembers.concat(channel.members);
+				new Collection();
+				voiceMembers.push(channel.members);
 			});
 			
 			var voiceChannelQuantity = voiceChannels.length;
 			
 			if (voiceChannels.has(message.guild.afkChannel)) {voiceChannelQuantity--};
 			
-			console.log(typeof voiceMembers);
+			console.log(voiceMembers);
 			
 			if (voiceMembers.length <= 1) {
 				var games = {};
@@ -987,7 +1014,7 @@ module.exports = {
 	"lenny": {
         specification:{
             command:{
-                description: (bot)=> {return `Fetches the user a splendid rendition of the Lenny Face.`},
+                description: (bot)=> {return `Fetches you a splendid rendition of the Lenny Face.`},
                 channelTypes: ['text','dm','group'],
                 permissionLevel: 'trusted',
                 functional: true
@@ -1002,7 +1029,58 @@ module.exports = {
 				err.severity = 5;
 				callback(exceptions.concat(err));
 			});
+		}
+    },
+	"johnnyjohnny": {
+        specification:{
+            command:{
+                description: (bot)=> {return `Role-plays everyone's favorite nursery rhyme.`},
+                channelTypes: ['text','dm','group'],
+                permissionLevel: 'trusted',
+                functional: false
+            },
+            variables:[]
+        },
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			var status = 1;
+			var rhyme = [
+				'Johnny Johnny',
+				'Yes papa',
+				'Eating sugar',
+				'No papa',
+				'Telling lies',
+				'No papa',
+				'Open your mouth',
+				'Ha ha ha!'
+			];
 			
+			message.reply(rhyme[status]).then(()=>{
+				const messageCollector = message.channel.createMessageCollector((m)=>{
+					return m.author.id == message.author.id;
+				}, {
+					maxMatches: Math.floor(rhyme.length/2)-1, time: 600000
+				});
+				
+				messageCollector.on('collect', m => {
+					status += 2;
+					console.log('Collected a message response.');
+					if (lib.levDist(m.content.toLowerCase(),rhyme[status-1]) < 4) {
+						message.reply(rhyme[status]);
+					} else {
+						messageCollector.stop('incorrect');
+						message.reply('HA HA HA!');
+					}
+				});
+				
+				messageCollector.on('end', m => {
+					console.log('Collector closed.');
+				});
+				
+				callback(exceptions);
+			}).catch(error =>{
+				err.severity = 5;
+				callback(exceptions.concat(error));
+			});
 		}
     },
 	"logging": {
@@ -1038,6 +1116,65 @@ module.exports = {
 				callback(exceptions.concat(err));
 			});
 		}
+    },
+	"shrekislove": {
+		specification:{
+            command:{
+                description: (bot)=> {return `Tells the tale of a 9-year-old's encounter with Shrek.`},
+                channelTypes: ['text','dm','group'],
+                permissionLevel: 'trusted',
+                functional: false
+            },
+            variables:[
+				['story', 'The number of the ShrekisLove story that you want to see (1 to 3). The greater the number, the more gruesome the story.', true, /\d+/, '1']
+			]
+        },
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			console.log("It's time.");
+			var story = JSON.parse(cmd['story']);
+			story--;
+			
+			var shrekStories = [
+				"Be 14\nBring Shrek 1 & 2 to class\nTell teacher we must watch Shrek\nTeacher makes class vote for what movie to watch\nShrek 2 has majority vote\n>feelsgoodman.jpg\nThen, Francias pulls out Despicable Me and hands it to teacher\nEveryone in class votes for it and laughs at me\nTeacher throws my Shreks back at me and puts Despicable Me in DVD player.\nAs the disc loads, I hear loud footsteps from outside. The rumbling shakes the desks and chairs.\nThe smell of onions filled the room.\nSuddenly, naked Shrek bursts through the wall and looks at the DVD menu of Despicable Me in anger\n>“Ogre m'aye dead bodeh”\nShrek throws two onionades at the TV and kills the teacher and the deaf girl\n>“Dohble Keel”\nShrek punches through a kid's chest, pulls out his heart and replaces it with an onionade\nKid explodes\n>“Treeple Kehl!”\nShrek graps Francis as he tries to escape and _bends him over_\nHe pulls out Francis' intestines through his butthole and ties an onion to it\nShrek then tosses the onion out the window and Francis is dragged out with it\nFrancis falls 8 stories to his death\n>“OGREKEEEEEL!”\nShrek turns around to rest of the class.\nHe quietly whispers, >“Thees is the pahrt whehre you run away”\nEntire class jumps out the windows to their death.\n>“SHREKSTERMINATION”\n_Shrek turns to me._\nHe looks me in the eye and smiles.\n>“Bet yeh weren't shrekspecting thAt”\n“I-is it... ogre?” I ask\n>“It's ogre when Aye say it's ogre.”\nI fall to my knees at his majesty\nI was ready to please Shrek.\nHe pulled out his massive ogresized eshrekt cock and lodged it in my throat.\nMy eyes filled with tears.\nMFW they were happy tears.\n\n>Shrek is love\n>Shrek is life",
+				"I was only 9 years old\nI loved Shrek so much, I had all the merchandise and movies\nI pray to Shrek every night before bed, thanking him for the life I’ve been given\n“Shrek is love” I say; “Shrek is life”\nMy dad hears me and calls me a faggot\nI know he was just jealous of my devotion for Shrek\nI called him a cunt\nHe slaps me and sends me to go to sleep\nI’m crying now, and my face hurts\nI lay in bed and it’s really cold\nSuddenly, a warmth is moving towards me\nIt’s Shrek\nI am so happy\nHe whispers into my ear “This is my swamp.”\nHe grabs me with his powerful ogre hands and puts me down onto my hands and knees\nI’m ready\nI spread my ass-cheeks for Shrek\nHe penetrates my butt-hole\nIt hurts so much but I do it for Shrek\nI can feel my butt tearing as my eyes start to water\nI push against his force\nI want to please Shrek\nHe roars in a mighty roar as he fills my butt with his love\nMy dad walks in\nShrek looks him straight in the eyes and says “It’s all ogre now.”\nShrek leaves through my window\nShrek is love. Shrek is life.",
+				"Be 18\nHave girlfriend\nHave sex on regular basis\nShe asks for a movie night, something erotic\nThink of two things we both love\n>Shrek and sex\nGo out of my way to find a shrek porno; search everywhere\nFound one finally\nSurprise her with a Shrek 1 porno\nShe laughs and says that's fucking retarded and no sex for week\nOne night shes over and we're cuddling\nWe start kissing and I reach down into her pants\nShe stops me and says  n o\nI say >“Why?”\n>“Because of that porno. It really weirded me out. I think we need a break.”\nWTF it was a stupid mistake\nHear a bang at the window\nI go to check it out\nSmell of onions suddenly becomes unbearable\nWindow smashes open and a naked, fully aroused Shrek appears.\nHis cock must of been 24 inches long with girth of 12 inches\nThis pulsating veiny cock aroused my girlfriend and I\nBecame unbearably horny\nHe shouts>“AH WE GON HAF A WEE TAH HAV A FOON TEIM LADS.”\nI insert my cock into girlfriend's vagina\nBegan fucking hard\nShrek jumps in front of her and shoves his cock into her mouth and began to thrust hard\nMoans in pure ecstasy and we all climax\nShrek and I switch sides\nGirlfriend speads her ass checks and yells “OH GOD PLEASE PUT IT IN MY ASS”\n>“AH NEVAH OOSE A OOSED OLD MAH LASS” he yells.\nRepeat another ten minutes of hardcore fucking and sucking\nShe passes out from peasure and has a great orgasm\n_>Shrek stares at me_\n>“EETS UR TURN LAD”\nI bend over with complete obedience\n>“LEETS BEEGUN”\nShrek penetrates my tender asshole and stretches my anus to the width of his girth.\nHe climaxes and fills me whole\nHe then receedes into the bushes and I got to my girlfriend and cuddle with her for the night\n\n_Shrek is love_\n_Shrek is life_"
+			];
+			
+			message.channel.send(shrekStories[story], {tts:true,split:{maxLength:180}}).then(()=>{
+				callback(exceptions);
+			}).catch((err)=>{
+				err.severity = 5;
+				callback(exceptions.concat(err));
+			});
+        }
+    },
+	"yeet": {
+		specification:{
+            command:{
+                description: (bot)=> {return `Kills a baby.`},
+                channelTypes: ['text','dm','group'],
+                permissionLevel: 'trusted',
+                functional: false,
+				hidden: true
+            },
+            variables:[
+				
+			]
+        },
+		process: function(bot, sql, lib, cmd, message, exceptions, callback) {
+			message.channel.send('What have you done?',{
+					files: [{
+						attachment: 'bot/assets/boy_with_gun.jpg',
+						name: 'whathaveyoudone.jpg'
+					}]
+				}
+			).then(()=>{
+				callback(exceptions);
+			}).catch((err)=>{
+				err.severity = 5;
+				callback(exceptions.concat(err));
+			});
+        }
     },
 };
 
